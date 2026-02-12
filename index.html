@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ControlMapper | Secure Control Mapping Tool</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <!-- SheetJS for Excel Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Transformers.js for Semantic Matching -->
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0';
+
+        // Configure for environments without local model serving (e.g. direct file execution)
+        env.allowLocalModels = false;
+        env.useBrowserCache = true;
+        env.remoteHost = 'https://huggingface.co';
+        env.remotePathTemplate = '{model}/resolve/{revision}/';
+
+        window.transformers = { pipeline, env };
+    </script>
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="logo-icon">∞</span>
+                <h1>ControlMapper</h1>
+            </div>
+            <nav class="tabs">
+                <button class="tab-btn active" data-tab="upload">Upload</button>
+                <button class="tab-btn" data-tab="mapping">Mapping</button>
+                <button class="tab-btn" data-tab="settings">Settings</button>
+            </nav>
+        </header>
+
+        <main class="content">
+            <section id="upload" class="tab-content active">
+                <div class="grid-container">
+                    <!-- Drata Controls Upload -->
+                    <div class="card upload-card" id="drata-card">
+                        <div class="card-header">
+                            <h2>1. Drata Controls</h2>
+                            <span class="status-badge" id="drata-status">Empty</span>
+                        </div>
+                        <p class="card-subtext">Upload the full set of Drata controls (Excel format).</p>
+                        <div class="drop-zone" id="drata-drop-zone">
+                            <input type="file" id="drata-file" accept=".xlsx, .xls, .csv" hidden>
+                            <label for="drata-file" class="upload-btn">
+                                <svg viewBox="0 0 24 24" width="24" height="24">
+                                    <path d="M12 16L12 8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
+                                        fill="none" />
+                                    <path
+                                        d="M3 15V16C3 18.2091 4.79086 20 7 20H17C19.2091 20 21 18.2091 21 16V15M3 9V8C3 5.79086 4.79086 4 7 4H17C19.2091 4 21 5.79086 21 8V9"
+                                        stroke="currentColor" stroke-width="2" fill="none" />
+                                </svg>
+                                Select File
+                            </label>
+                            <span class="file-name" id="drata-filename">No file selected</span>
+                            <span class="row-count" id="drata-row-count"></span>
+                        </div>
+                        <div class="column-selector" id="drata-column-container" style="display:none;">
+                            <div class="selector-group">
+                                <label for="drata-id-column">Select ID column:</label>
+                                <select id="drata-id-column"></select>
+                            </div>
+                            <div class="selector-group">
+                                <label for="drata-column">Select Description column:</label>
+                                <select id="drata-column"></select>
+                            </div>
+                        </div>
+                        <div class="data-preview" id="drata-preview-container" style="display:none;">
+                            <h4>Data Preview (First 5 rows)</h4>
+                            <div class="preview-scroll">
+                                <table id="drata-preview-table"></table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Controls Upload -->
+                    <div class="card upload-card" id="custom-card">
+                        <div class="card-header">
+                            <h2>2. Custom Control Set</h2>
+                            <span class="status-badge" id="custom-status">Empty</span>
+                        </div>
+                        <p class="card-subtext">Upload your custom control set (e.g., CPS 234).</p>
+                        <div class="drop-zone" id="custom-drop-zone">
+                            <input type="file" id="custom-file" accept=".xlsx, .xls, .csv" hidden>
+                            <label for="custom-file" class="upload-btn">
+                                <svg viewBox="0 0 24 24" width="24" height="24">
+                                    <path d="M12 16L12 8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
+                                        fill="none" />
+                                    <path
+                                        d="M3 15V16C3 18.2091 4.79086 20 7 20H17C19.2091 20 21 18.2091 21 16V15M3 9V8C3 5.79086 4.79086 4 7 4H17C19.2091 4 21 5.79086 21 8V9"
+                                        stroke="currentColor" stroke-width="2" fill="none" />
+                                </svg>
+                                Select File
+                            </label>
+                            <span class="file-name" id="custom-filename">No file selected</span>
+                            <span class="row-count" id="custom-row-count"></span>
+                        </div>
+                        <div class="column-selector" id="custom-column-container" style="display:none;">
+                            <div class="selector-group">
+                                <label for="custom-id-column">Select ID column:</label>
+                                <select id="custom-id-column"></select>
+                            </div>
+                            <div class="selector-group">
+                                <label for="custom-column">Select Description column:</label>
+                                <select id="custom-column"></select>
+                            </div>
+                        </div>
+                        <div class="data-preview" id="custom-preview-container" style="display:none;">
+                            <h4>Data Preview (First 5 rows)</h4>
+                            <div class="preview-scroll">
+                                <table id="custom-preview-table"></table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="summary-section" id="comparison-summary" style="display:none;">
+                    <div class="summary-info">
+                        <h3>Configuration Ready</h3>
+                        <p>Comparing <strong id="drata-col-preview">None</strong> from Drata to <strong
+                                id="custom-col-preview">None</strong> from Custom.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="mapping" class="tab-content">
+                <div class="mapping-excel-view">
+                    <div class="table-actions">
+                        <div class="mapping-controls">
+                            <div class="control-group">
+                                <label for="top-x-input">Matches per control:</label>
+                                <input type="number" id="top-x-input" min="1" max="20" value="5" class="number-input">
+                            </div>
+                            <div class="control-group">
+                                <label for="sort-by-select">Prioritize by:</label>
+                                <select id="sort-by-select" class="source-select">
+                                    <option value="weighted">Weighted Avg %</option>
+                                    <option value="semantic">Semantic %</option>
+                                    <option value="keyword">Keyword %</option>
+                                </select>
+                            </div>
+                            <div class="control-group weight-slider-group">
+                                <label for="mapping-weight-slider">AI Weight: <span
+                                        id="weight-value-display">50</span>%</label>
+                                <div class="slider-wrapper">
+                                    <span class="slider-hint">Keyword</span>
+                                    <input type="range" id="mapping-weight-slider" min="0" max="100" value="50"
+                                        class="weight-slider">
+                                    <span class="slider-hint">Semantic</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mapping-actions">
+                            <div id="model-status" class="model-status" style="display: none;">
+                                <span class="spinner"></span> Loading AI Semantic Model...
+                            </div>
+                            <button id="refresh-mapping-btn" class="upload-btn primary-btn" style="margin-right: 8px;">
+                                <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right: 8px;">
+                                    <path d="M12 16L12 8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
+                                        fill="none" />
+                                    <path
+                                        d="M3 15V16C3 18.2091 4.79086 20 7 20H17C19.2091 20 21 18.2091 21 16V15M3 9V8C3 5.79086 4.79086 4 7 4H17C19.2091 4 21 5.79086 21 8V9"
+                                        stroke="currentColor" stroke-width="2" fill="none" />
+                                </svg>
+                                Refresh Suggestions
+                            </button>
+                            <button id="download-results-btn" class="upload-btn primary-btn">
+                                <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right: 8px;">
+                                    <path d="M12 16L12 8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
+                                        fill="none" />
+                                    <path
+                                        d="M3 15V16C3 18.2091 4.79086 20 7 20H17C19.2091 20 21 18.2091 21 16V15M3 9V8C3 5.79086 4.79086 4 7 4H17C19.2091 4 21 5.79086 21 8V9"
+                                        stroke="currentColor" stroke-width="2" fill="none" />
+                                </svg>
+                                Download Results
+                            </button>
+                        </div>
+                        <div class="table-container">
+                            <table id="mapping-table">
+                                <colgroup>
+                                    <col id="col-0" style="width: 50px;">
+                                    <col id="col-1" style="width: 350px;">
+                                    <col id="col-2" style="width: 100px;">
+                                    <col id="col-3" style="width: 100px;">
+                                    <col id="col-weighted" style="width: 120px;">
+                                    <col id="col-4" style="width: 120px;">
+                                    <col id="col-5" style="width: 800px;">
+                                    <col id="col-6" style="width: 120px;">
+                                    <col id="col-7" style="width: 250px;">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th data-col-index="0">#<div class="resizer"></div>
+                                        </th>
+                                        <th class="col-regulation" data-col-index="1">Regulation / Custom
+                                            Control<div class="resizer"></div>
+                                        </th>
+                                        <th class="col-score" data-col-index="2">Keyword %<div class="resizer"></div>
+                                        </th>
+                                        <th class="col-semantics" data-col-index="3">Semantics %<div class="resizer">
+                                            </div>
+                                        </th>
+                                        <th class="col-weighted" data-col-index="weighted">Weighted Avg %<div
+                                                class="resizer">
+                                            </div>
+                                        </th>
+                                        <th class="col-id" data-col-index="4">ID<div class="resizer"></div>
+                                        </th>
+                                        <th class="col-control" data-col-index="5">Drata Control Text<div
+                                                class="resizer">
+                                            </div>
+                                        </th>
+                                        <th class="col-select" data-col-index="6">Action<div class="resizer">
+                                            </div>
+                                        </th>
+                                        <th class="col-comments" data-col-index="7">Comments<div class="resizer"></div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mapping-body">
+                                    <tr>
+                                        <td colspan="8" class="empty-state">Load files in Upload tab first</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+            </section>
+
+            <section id="settings" class="tab-content">
+                <div class="card settings-card">
+                    <div class="settings-card">
+                        <div class="toggle-container" style="margin-bottom: 1rem;">
+                            <label class="switch-label">
+                                <span>Model Source</span>
+                                <small>Choose where to download the AI model from.</small>
+                            </label>
+                            <select id="model-source-select" class="upload-btn"
+                                style="width: auto; background: var(--bg-dark);">
+                                <option value="https://huggingface.co">Hugging Face (Global)</option>
+                                <option value="https://hf-mirror.com">HF Mirror (China/Alternative)</option>
+                                <option value="local">Local Folder (Self-hosted)</option>
+                                <option value="custom">Custom URL...</option>
+                            </select>
+                        </div>
+
+                        <div id="custom-host-container" class="toggle-container"
+                            style="display: none; margin-bottom: 1rem;">
+                            <label class="switch-label">
+                                <span>Custom Host URL</span>
+                            </label>
+                            <input type="text" id="custom-host-url" placeholder="https://your-mirror.com"
+                                style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 5px 10px; border-radius: 4px; flex-grow: 1; margin-left: 20px;">
+                        </div>
+
+                        <div class="toggle-container">
+                            <label class="switch-label" for="ai-toggle">
+                                <span>Enable Semantic Matching (AI)</span>
+                                <small>Uses vector embeddings to find matches by meaning. Requires internet
+                                    connection.</small>
+                            </label>
+                            <label class="switch">
+                                <input type="checkbox" id="ai-toggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <button id="download-ai-btn" class="upload-btn"
+                            style="margin-top: 1rem; width: auto; font-size: 0.8rem; padding: 6px 16px;">
+                            📥 Initialize / Re-download AI Model
+                        </button>
+                    </div>
+
+                    <div class="settings-group">
+                        <label for="stopwords-area">Ignore Common Words (Stopwords)</label>
+                        <p class="card-subtext">Words listed here will be ignored during similarity calculation.</p>
+                        <textarea id="stopwords-area" rows="10"></textarea>
+                    </div>
+                    <button id="save-settings-btn" class="upload-btn">Save Settings</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 ControlMapper Professional. Securely stored in-browser.</p>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
