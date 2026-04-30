@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activeTab: 'readme',
         columnWidths: {}, // format: { classIdentifier: widthInPx }
         aiEnabled: true,
-        modelSource: 'https://huggingface.co',
+        modelSource: 'github',
         customHost: '',
         weightSemantic: 50, // 0-100, percentage for semantic weight
         embeddings: {
@@ -91,6 +91,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 env.remoteHost = window.location.origin + window.location.pathname.split('/').slice(0, -1).join('/') + '/';
+                env.remotePathTemplate = 'models/{model}/';
+            } else if (state.modelSource === 'github') {
+                env.allowLocalModels = false;
+                env.allowRemoteModels = true;
+                env.remoteHost = 'https://raw.githubusercontent.com/ziamz/ControlMapper/main/';
                 env.remotePathTemplate = 'models/{model}/';
             } else {
                 env.allowLocalModels = false;
