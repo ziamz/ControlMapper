@@ -305,7 +305,7 @@ select:focus {
     border-radius: 0.75rem;
     overflow-x: auto;
     margin-top: 1rem;
-    max-height: calc(100vh - 200px);
+    max-height: calc(100vh - 120px);
 }
 
 .table-container table {
