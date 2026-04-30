@@ -1,6 +1,6 @@
 # ControlMapper Installation & Setup Guide
 
-ControlMapper is a secure, browser-based tool for mapping custom controls to Drata controls using keyword and AI-powered semantic matching.
+ControlMapper is a secure, browser-based tool for mapping Custom Controls to Control Library using keyword and AI-powered semantic matching.
 
 ## Prerequisites
 

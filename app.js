@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+
+    const DEFAULT_AI_PROMPT_TEMPLATE = `Compare these two security controls and identify any GAPS in Control Library relative to Custom Controls. \n\nCustom Controls: "{{customText}}"\nControl Library: "{{controlLibraryText}}"\n\nResponse should be a concise summary of missing elements in Control Library. If no significant gaps, say "No significant gaps detected."`;
+    const DEFAULT_AI_GROUP_PROMPT_TEMPLATE = `You are a security compliance expert. Compare multiple security controls (Control Library) against one control (Custom Controls). Identify if the COMBINED set of Control Library controls covers all elements of Custom Controls. If there are still GAPS, identify them concisely.\n\nCustom Controls: "{{customText}}"\nControl Library:\n{{controlLibraryList}}\n\nResponse should be a concise summary of missing elements in the combined set. If no significant gaps, say "No significant gaps detected."`;
+
     // State management
     const state = {
         drata: {
@@ -15,13 +19,14 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedColumn: null,
             filename: null
         },
-        mappings: {}, // format: { customControlId: drataControlId }
+        mappings: {}, // format: { customControlId: [drataControlId1, drataControlId2, ...] }
         comments: {}, // format: { customControlId: { drataControlId: commentText } }
+        groupComments: {}, // format: { customControlId: groupedCommentText }
         threshold: 60,
         topX: 5,
         sortBy: 'semantic', // 'semantic' or 'keyword'
         stopwords: ['a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'at', 'from', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing'],
-        activeTab: 'upload',
+        activeTab: 'readme',
         columnWidths: {}, // format: { classIdentifier: widthInPx }
         aiEnabled: true,
         modelSource: 'https://huggingface.co',
@@ -31,7 +36,15 @@ document.addEventListener('DOMContentLoaded', () => {
             drata: new Map(), // drataText -> embedding
             custom: new Map() // customText -> embedding
         },
-        drataTokens: new Map() // drataText -> Set of tokens
+        drataTokens: new Map(), // drataText -> Set of tokens
+        gapAnalysisEnabled: false,
+        geminiApiKey: '',
+        aiProvider: 'gemini',
+        aiBaseUrl: '',
+        aiModel: 'gemini-1.5-flash',
+        aiPromptTemplate: DEFAULT_AI_PROMPT_TEMPLATE,
+        aiGroupPromptTemplate: DEFAULT_AI_GROUP_PROMPT_TEMPLATE,
+        autoLoadModel: true
     };
 
     const modelStatus = document.getElementById('model-status');
@@ -50,6 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pipelinePromise) return pipelinePromise; // Wait for existing load
 
         pipelinePromise = (async () => {
+            const headerStatus = document.getElementById('header-ai-status');
+            const headerStatusText = headerStatus ? headerStatus.querySelector('.status-text') : null;
+
             if (!window.transformers) {
                 console.error("Transformers.js not found. Check your internet connection.");
                 if (modelStatus) {
@@ -95,6 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 modelStatus.innerHTML = '<span class="spinner"></span> Connecting to Model Source...';
             }
 
+            if (headerStatus) {
+                headerStatus.style.display = 'flex';
+                if (headerStatusText) headerStatusText.textContent = 'Starting AI...';
+            }
+
             console.log(`Loading AI Model from ${state.modelSource === 'local' ? './models/' : env.remoteHost}...`);
 
             // Use a timeout to detect hangs (60 seconds)
@@ -105,11 +126,15 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const loadPromise = window.transformers.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
                     progress_callback: (data) => {
+                        const progress = data.status === 'progress' ? Math.round(data.progress) : 0;
                         if (data.status === 'progress' && modelStatus) {
-                            const progress = Math.round(data.progress);
                             modelStatus.innerHTML = `<span class="spinner"></span> Downloading AI Model: ${progress}%`;
                         } else if (data.status === 'download' && modelStatus) {
                             modelStatus.innerHTML = `<span class="spinner"></span> Downloading: ${data.file}...`;
+                        }
+
+                        if (headerStatusText) {
+                            headerStatusText.textContent = progress > 0 ? `AI Loading: ${progress}%` : 'AI Loading...';
                         }
                     }
                 });
@@ -122,6 +147,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     setTimeout(() => {
                         modelStatus.style.opacity = '0';
                         setTimeout(() => modelStatus.style.display = 'none', 500);
+                    }, 3000);
+                }
+
+                if (headerStatus) {
+                    if (headerStatusText) headerStatusText.textContent = 'AI Ready';
+                    setTimeout(() => {
+                        headerStatus.style.opacity = '0';
+                        setTimeout(() => {
+                            headerStatus.style.display = 'none';
+                            headerStatus.style.opacity = '1';
+                        }, 500);
                     }, 3000);
                 }
             } catch (error) {
@@ -140,6 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${suggestMirror ? '<small style="color: var(--text-muted); opacity: 0.8;">Company network blocking HF? Try <strong>HF Mirror</strong> in Settings.</small>' : ''}
                 </div>`;
                 }
+
+                if (headerStatus) headerStatus.style.display = 'none';
+
                 pipelinePromise = null; // Clear so it can be retried
             } finally {
                 isPipelineLoading = false;
@@ -292,6 +331,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const mappingWeightSlider = document.getElementById('mapping-weight-slider');
     const weightDisplay = document.getElementById('weight-value-display');
+
+    // Sheet Modal Elements
+    const sheetModal = document.getElementById('sheet-modal');
+    const sheetList = document.getElementById('sheet-list');
+    const closeSheetModal = document.getElementById('close-sheet-modal');
+    const confirmLoadBtn = document.getElementById('confirm-load-btn');
+    const cancelLoadBtn = document.getElementById('cancel-load-btn');
+    const headerRowInput = document.getElementById('header-row-input');
+    const gapAnalysisToggle = document.getElementById('gap-analysis-toggle');
+    const geminiApiKeyInput = document.getElementById('gemini-api-key');
+    const aiProviderSelect = document.getElementById('ai-provider-select');
+    const aiBaseUrlInput = document.getElementById('ai-base-url');
+    const aiModelNameInput = document.getElementById('ai-model-name');
+    const aiBaseUrlContainer = document.getElementById('ai-base-url-container');
+    const bulkGapBtn = document.getElementById('bulk-gap-btn');
+    const bulkLimitInput = document.getElementById('bulk-limit-input');
+    const aiPromptTemplateInput = document.getElementById('ai-prompt-template');
+    const aiGroupPromptTemplateInput = document.getElementById('ai-group-prompt-template');
+    const autoLoadToggle = document.getElementById('auto-load-toggle');
 
     // Toggle Retry logic
     window.retryAiLoad = () => {
@@ -447,6 +505,70 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (gapAnalysisToggle) {
+        gapAnalysisToggle.addEventListener('change', (e) => {
+            state.gapAnalysisEnabled = e.target.checked;
+            saveState();
+        });
+    }
+
+    if (geminiApiKeyInput) {
+        geminiApiKeyInput.addEventListener('input', (e) => {
+            state.geminiApiKey = e.target.value;
+            saveState();
+        });
+    }
+
+    if (aiProviderSelect) {
+        aiProviderSelect.addEventListener('change', (e) => {
+            state.aiProvider = e.target.value;
+            if (aiBaseUrlContainer) {
+                aiBaseUrlContainer.style.display = state.aiProvider === 'openai' ? 'flex' : 'none';
+            }
+            // Update default model if needed
+            if (!state.aiModel || state.aiModel === 'gemini-1.5-flash' || state.aiModel === 'gpt-4o') {
+                state.aiModel = state.aiProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o';
+                if (aiModelNameInput) aiModelNameInput.value = state.aiModel;
+            }
+            saveState();
+        });
+    }
+
+    if (aiBaseUrlInput) {
+        aiBaseUrlInput.addEventListener('input', (e) => {
+            state.aiBaseUrl = e.target.value;
+            saveState();
+        });
+    }
+
+    if (aiModelNameInput) {
+        aiModelNameInput.addEventListener('input', (e) => {
+            state.aiModel = e.target.value;
+            saveState();
+        });
+    }
+
+    if (aiPromptTemplateInput) {
+        aiPromptTemplateInput.addEventListener('input', (e) => {
+            state.aiPromptTemplate = e.target.value;
+            saveState();
+        });
+    }
+
+    if (aiGroupPromptTemplateInput) {
+        aiGroupPromptTemplateInput.addEventListener('input', (e) => {
+            state.aiGroupPromptTemplate = e.target.value;
+            saveState();
+        });
+    }
+
+    if (autoLoadToggle) {
+        autoLoadToggle.addEventListener('change', (e) => {
+            state.autoLoadModel = e.target.checked;
+            saveState();
+        });
+    }
+
     if (downloadAiBtn) {
         downloadAiBtn.addEventListener('click', () => {
             console.log("Manual AI Initialization Triggered...");
@@ -498,6 +620,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (bulkGapBtn) {
+        bulkGapBtn.addEventListener('click', () => {
+            if (!state.gapAnalysisEnabled || !state.geminiApiKey) {
+                alert('Please enable AI Gap Analysis and provide an API Key in Settings first.');
+                return;
+            }
+            if (!state.custom.data || !state.drata.data) {
+                alert('No data loaded. Use Upload tab first.');
+                return;
+            }
+            runBulkGapAnalysis();
+        });
+    }
+
     if (exportBtn) {
         exportBtn.addEventListener('click', () => {
             if (!state.custom.data || !state.drata.data) {
@@ -511,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function exportToExcel() {
         console.log("exportToExcel function called");
         if (!state.custom.data || !state.drata.data) {
-            console.warn("Export failed: Custom or Drata data is missing", { customData: !!state.custom.data, drataData: !!state.drata.data });
+            console.warn("Export failed: Custom Controls or Control Library data is missing", { customData: !!state.custom.data, drataData: !!state.drata.data });
             return;
         }
 
@@ -552,7 +688,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const customId = (customIdRaw !== undefined && customIdRaw !== null && customIdRaw !== '') ? String(customIdRaw) : `C-${cIdx + 1}`;
                     const mapKey = (customIdRaw !== undefined && customIdRaw !== null && customIdRaw !== '') ? String(customIdRaw) : customText;
 
-                    const topMatches = state.drata.data.map((drataControl) => {
+                    // Find current mappings
+                    const mappedDrataIds = state.mappings[mapKey] || [];
+                    const groupComment = state.groupComments[mapKey] || '';
+
+                    let matches = state.drata.data.map((drataControl) => {
                         const drataText = getColumnValue(drataControl, state.drata.selectedColumn) || '';
                         const scores = calculateScoresSync(customText, drataText);
                         return { control: drataControl, ...scores };
@@ -560,48 +700,72 @@ document.addEventListener('DOMContentLoaded', () => {
                         .sort((a, b) => b[state.sortBy] - a[state.sortBy])
                         .slice(0, state.topX);
 
-                    if (topMatches.length === 0) {
-                        const hasCustomId = customIdRaw !== null && customIdRaw !== undefined && String(customIdRaw).trim() !== '';
-                        const exportText = hasCustomId ? (customId !== customText ? `${customId}: ${customText}` : customId) : `${cIdx + 1}: ${customText}`;
+                    // Ensure ALL mapped controls are in the exported list even if not in topX
+                    mappedDrataIds.forEach(mId => {
+                        const isAlreadyInMatches = matches.some(match => {
+                            let rawId = getColumnValue(match.control, state.drata.idColumn) || findBestId(match.control);
+                            const currentDrataId = rawId ? String(rawId) : (getColumnValue(match.control, state.drata.selectedColumn) || '');
+                            return currentDrataId === mId;
+                        });
+
+                        if (!isAlreadyInMatches) {
+                            const mappedControl = state.drata.data.find(d => {
+                                let rawId = getColumnValue(d, state.drata.idColumn) || findBestId(d);
+                                const currentDrataId = rawId ? String(rawId) : (getColumnValue(d, state.drata.selectedColumn) || '');
+                                return currentDrataId === mId;
+                            });
+
+                            if (mappedControl) {
+                                const drataText = getColumnValue(mappedControl, state.drata.selectedColumn) || '';
+                                const scores = calculateScoresSync(customText, drataText);
+                                matches.push({ control: mappedControl, ...scores, forceInclude: true });
+                            }
+                        }
+                    });
+
+                    if (matches.length === 0) {
+                        const exportText = (customIdRaw !== null && customIdRaw !== undefined && String(customIdRaw).trim() !== '') ? (customId !== customText ? `${customId}: ${customText}` : customId) : `${cIdx + 1}: ${customText}`;
 
                         exportData.push({
                             '#': cIdx + 1,
-                            'Regulation / Custom Control': exportText,
+                            'Regulation / Custom Controls': exportText,
                             'Keyword %': '',
                             'Semantics %': '',
                             'Weighted Avg %': '',
                             'ID': '',
-                            'Drata Control Text': '',
-                            'Action': '',
-                            'Comments': ''
+                            'Control Library Text': '',
+                            'Trigger LLM Analysis': '',
+                            'LLM Gap Analysis': '',
+                            'Mapped?': '',
+                            'Grouped Analysis': groupComment
                         });
                     } else {
-                        for (let mIdx = 0; mIdx < topMatches.length; mIdx++) {
-                            const match = topMatches[mIdx];
+                        matches.forEach((match, mIdx) => {
                             const drataValue = getColumnValue(match.control, state.drata.selectedColumn) || '';
                             let rawId = getColumnValue(match.control, state.drata.idColumn) || findBestId(match.control);
                             const drataIdDisplay = rawId ? String(rawId) : 'N/A';
-                            const drataMappedId = rawId ? String(rawId) : drataValue;
+                            const currentDrataId = rawId ? String(rawId) : drataValue;
 
-                            const isMapped = state.mappings[mapKey] === drataMappedId;
-                            const commentKey = `${mapKey}-${drataMappedId}`;
+                            const isMapped = mappedDrataIds.includes(currentDrataId);
+                            const commentKey = `${mapKey}-${currentDrataId}`;
                             const savedComment = state.comments[commentKey] || '';
 
-                            const hasCustomId = customIdRaw !== null && customIdRaw !== undefined && String(customIdRaw).trim() !== '';
-                            const exportText = hasCustomId ? (customId !== customText ? `${customId}: ${customText}` : customId) : `${cIdx + 1}: ${customText}`;
+                            const exportText = (customIdRaw !== null && customIdRaw !== undefined && String(customIdRaw).trim() !== '') ? (customId !== customText ? `${customId}: ${customText}` : customId) : `${cIdx + 1}: ${customText}`;
 
                             exportData.push({
-                                '#': mIdx === 0 ? cIdx + 1 : '',
-                                'Regulation / Custom Control': mIdx === 0 ? exportText : '',
+                                '#': mIdx === 0 ? cIdx + 1 : (match.forceInclude ? '*' : ''),
+                                'Regulation / Custom Controls': mIdx === 0 ? exportText : '',
                                 'Keyword %': Math.round(match.keyword) + '%',
                                 'Semantics %': Math.round(match.semantic) + '%',
                                 'Weighted Avg %': Math.round(match.weighted) + '%',
                                 'ID': drataIdDisplay,
-                                'Drata Control Text': drataValue,
-                                'Action': isMapped ? 'Y' : '',
-                                'Comments': savedComment
+                                'Control Library Text': drataValue,
+                                'Trigger LLM Analysis': '', // Removed mapped indicator from here
+                                'LLM Gap Analysis': savedComment,
+                                'Mapped?': isMapped ? 'Y' : '',
+                                'Grouped Analysis': mIdx === 0 ? groupComment : ''
                             });
-                        }
+                        });
                     }
                 }
                 // Yield to browser
@@ -702,7 +866,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <td>${cIdx + 1}</td>
                                 <td class="col-regulation"><strong>${primaryText}</strong>${secondaryText ? `<br><small>${secondaryText}</small>` : ''}</td>
                                 <td colspan="5" class="empty-state">No suggestions above threshold</td>
+                                <td class="col-select"></td>
                                 <td class="col-comments"></td>
+                                <td class="col-mapped"></td>
+                                <td class="col-group-analysis"></td>
                             `;
                         fragment.appendChild(emptyRow);
                     } else {
@@ -712,9 +879,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             const drataIdDisplay = rawId ? String(rawId) : 'N/A';
                             const drataMappedId = rawId ? String(rawId) : drataValue;
 
-                            const isMapped = state.mappings[mapKey] === drataMappedId;
+                            const mappedIds = state.mappings[mapKey] || [];
+                            const isMapped = Array.isArray(mappedIds) ? mappedIds.includes(drataMappedId) : mappedIds === drataMappedId; // Safely handle both
                             const commentKey = `${mapKey}-${drataMappedId}`;
                             const savedComment = state.comments[commentKey] || '';
+                            const hasComment = savedComment && !savedComment.startsWith('🤖') && !savedComment.startsWith('⚠️');
+                            const isAnalyzing = savedComment === "🤖 AI Analyzing gaps...";
 
                             const row = document.createElement('tr');
                             row.className = `match-row ${isMapped ? 'mapped' : ''}`;
@@ -722,6 +892,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             const hasCustomId = customIdRaw !== null && customIdRaw !== undefined && String(customIdRaw).trim() !== '';
                             const primaryText = hasCustomId ? customId : customText;
                             const secondaryText = hasCustomId ? (customId !== customText ? customText : '') : `C-${cIdx + 1}`;
+
+                            // Group analysis state
+                            const groupComment = state.groupComments[mapKey] || '';
+                            const isGroupAnalyzing = groupComment === "🤖 AI Analyzing grouped controls...";
 
                             row.innerHTML = `
                                     <td>${mIdx === 0 ? cIdx + 1 : ''}</td>
@@ -733,22 +907,67 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td class="col-control">${drataValue}</td>
                                     <td class="col-select">
                                         <div class="action-cell">
-                                            <span class="action-y">${isMapped ? 'Y' : ''}</span>
-                                            <button class="upload-btn select-match-btn">${isMapped ? 'Unmap' : 'Select'}</button>
+                                            <button class="upload-btn select-match-btn ${isAnalyzing ? 'analyzing' : ''}" ${isAnalyzing ? 'disabled' : ''}>
+                                                ${isAnalyzing ? 'Analyzing...' : (hasComment ? 'Regenerate' : 'Analyze')}
+                                            </button>
                                         </div>
-                                    </td>
-                                    <td class="col-comments"><textarea placeholder="Add notes..." class="comment-area">${savedComment}</textarea></td>
-                                `;
+                                     </td>
+                                     <td class="col-comments"><div class="comment-wrapper"><textarea placeholder="Add notes..." class="comment-area">${savedComment}</textarea></div></td>
+                                     <td class="col-mapped">
+                                         <div class="action-cell">
+                                             <input type="checkbox" class="mapped-checkbox" ${isMapped ? 'checked' : ''}>
+                                         </div>
+                                     </td>
+                                     <td class="col-group-analysis">
+                                         ${mIdx === 0 ? `
+                                         <div class="action-cell" style="flex-direction: column; gap: 5px; align-items: stretch; padding: 5px; height: 100%; box-sizing: border-box;">
+                                             <button class="upload-btn group-analyze-btn ${isGroupAnalyzing ? 'analyzing' : ''}" ${isGroupAnalyzing ? 'disabled' : ''} style="width: 100%; flex-shrink: 0;">
+                                                 ${isGroupAnalyzing ? 'Analyzing Group...' : (groupComment ? 'Regenerate Group' : 'Group Analyze')}
+                                             </button>
+                                             <div class="comment-wrapper" style="flex: 1; min-height: 0;">
+                                                 <textarea placeholder="Group analysis result..." class="group-comment-area comment-area" style="font-size: 11px; min-height: 60px;">${groupComment}</textarea>
+                                             </div>
+                                         </div>
+                                         ` : ''}
+                                     </td>
+                                 `;
 
                             row.querySelector('.select-match-btn').addEventListener('click', () => {
-                                toggleMapping(mapKey, drataMappedId);
-                                renderMappingTable();
+                                if (state.gapAnalysisEnabled && state.geminiApiKey) {
+                                    const commentKey = `${mapKey}-${drataMappedId}`;
+                                    state.comments[commentKey] = "🤖 AI Analyzing gaps...";
+                                    runGapAnalysis(mapKey, drataMappedId, drataValue, customText);
+                                    renderMappingTable();
+                                } else {
+                                    alert('Please enable AI Gap Analysis and provide an API Key in Settings first.');
+                                }
                             });
 
                             row.querySelector('.comment-area').addEventListener('input', (e) => {
                                 state.comments[commentKey] = e.target.value;
                                 saveState();
                             });
+
+                            row.querySelector('.mapped-checkbox').addEventListener('change', (e) => {
+                                toggleMapping(mapKey, drataMappedId);
+                                renderMappingTable();
+                            });
+
+                            if (mIdx === 0) {
+                                row.querySelector('.group-analyze-btn').addEventListener('click', () => {
+                                    if (state.gapAnalysisEnabled && state.geminiApiKey) {
+                                        const mappedIds = state.mappings[mapKey] || [];
+                                        runGroupGapAnalysis(mapKey, mappedIds, customText);
+                                    } else {
+                                        alert('Please enable AI Gap Analysis and provide an API Key in Settings first.');
+                                    }
+                                });
+
+                                row.querySelector('.group-comment-area').addEventListener('input', (e) => {
+                                    state.groupComments[mapKey] = e.target.value;
+                                    saveState();
+                                });
+                            }
 
                             fragment.appendChild(row);
                         });
@@ -779,12 +998,269 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function toggleMapping(customId, drataId) {
-        if (state.mappings[customId] === drataId) {
-            delete state.mappings[customId];
+        if (!state.mappings[customId]) {
+            state.mappings[customId] = [];
+        }
+
+        const ids = state.mappings[customId];
+        if (ids.includes(drataId)) {
+            state.mappings[customId] = ids.filter(id => id !== drataId);
+            if (state.mappings[customId].length === 0) {
+                delete state.mappings[customId];
+            }
         } else {
-            state.mappings[customId] = drataId;
+            ids.push(drataId);
         }
         saveState();
+    }
+
+    async function runBulkGapAnalysis() {
+        if (!state.custom.data || !state.drata.data) return;
+
+        const limit = parseInt(bulkLimitInput?.value) || 10;
+        bulkGapBtn.disabled = true;
+        bulkGapBtn.innerHTML = '⏳ Initializing...';
+
+        const tasks = [];
+        const maxControlsToProcess = Math.min(limit, state.custom.data.length);
+
+        for (let cIdx = 0; cIdx < maxControlsToProcess; cIdx++) {
+            const customControl = state.custom.data[cIdx];
+            const customText = getColumnValue(customControl, state.custom.selectedColumn) || '';
+            const customIdRaw = getColumnValue(customControl, state.custom.idColumn);
+            const mapKey = (customIdRaw !== undefined && customIdRaw !== null && customIdRaw !== '') ? String(customIdRaw) : customText;
+
+            // Find top suggestion
+            const matches = state.drata.data.map(drataControl => {
+                const drataText = getColumnValue(drataControl, state.drata.selectedColumn) || '';
+                const scores = calculateScoresSync(customText, drataText);
+                return { control: drataControl, ...scores };
+            })
+                .sort((a, b) => b[state.sortBy] - a[state.sortBy]);
+
+            if (matches.length > 0) {
+                const topMatch = matches[0];
+                const drataValue = getColumnValue(topMatch.control, state.drata.selectedColumn) || '';
+                let rawId = getColumnValue(topMatch.control, state.drata.idColumn) || findBestId(topMatch.control);
+                const drataMappedId = rawId ? String(rawId) : drataValue;
+                const commentKey = `${mapKey}-${drataMappedId}`;
+
+                if (!state.comments[commentKey] || state.comments[commentKey].startsWith('⚠️') || state.comments[commentKey] === "🤖 AI Analyzing gaps...") {
+                    tasks.push({
+                        customId: mapKey,
+                        drataId: drataMappedId,
+                        drataText: drataValue,
+                        customText: customText
+                    });
+                }
+            }
+        }
+
+        if (tasks.length === 0) {
+            alert(`No new rows to analyze in the top ${maxControlsToProcess} controls.`);
+            bulkGapBtn.disabled = false;
+            bulkGapBtn.innerHTML = '🤖 Bulk Analyze Gaps';
+            return;
+        }
+
+        if (mappingProgress) {
+            mappingProgress.style.display = 'flex';
+            mappingProgress.style.opacity = '1';
+            mappingProgress.innerHTML = `<span class="spinner"></span> Bulk Analysis: 0 / ${tasks.length}`;
+        }
+
+        const CONCURRENCY = 3;
+        let completed = 0;
+        const total = tasks.length;
+
+        async function worker() {
+            while (tasks.length > 0) {
+                const task = tasks.shift();
+                const commentKey = `${task.customId}-${task.drataId}`;
+                state.comments[commentKey] = "🤖 AI Analyzing gaps...";
+
+                // We don't call renderMappingTable for every single one to avoid UI lag
+                // but we update the progress
+                try {
+                    await runGapAnalysis(task.customId, task.drataId, task.drataText, task.customText, false);
+                } catch (e) {
+                    console.error("Bulk Analysis Row Error:", e);
+                }
+
+                completed++;
+                if (mappingProgress) {
+                    mappingProgress.innerHTML = `<span class="spinner"></span> Bulk Analysis: ${completed} / ${total}`;
+                }
+
+                // Throttle a bit to avoid hitting rate limits too fast
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+
+        // Start workers
+        const workers = Array(Math.min(CONCURRENCY, tasks.length)).fill(null).map(worker);
+        await Promise.all(workers);
+
+        bulkGapBtn.disabled = false;
+        bulkGapBtn.innerHTML = '🤖 Bulk Analyze Gaps';
+
+        if (mappingProgress) {
+            mappingProgress.innerHTML = '✨ Bulk Analysis Complete';
+            setTimeout(() => {
+                mappingProgress.style.opacity = '0';
+                setTimeout(() => mappingProgress.style.display = 'none', 500);
+            }, 2000);
+        }
+
+
+        renderMappingTable();
+    }
+
+        async function runGroupGapAnalysis(customId, drataIds, customText) {
+            if (!drataIds || drataIds.length === 0) {
+                alert('No Control Library controls selected for this group.');
+                return;
+            }
+
+            try {
+                state.groupComments[customId] = "🤖 AI Analyzing grouped controls...";
+                renderMappingTable();
+
+                // Collect all mapped drata control texts
+                const drataTexts = drataIds.map(dId => {
+                    const control = state.drata.data.find(d => {
+                        let rawId = getColumnValue(d, state.drata.idColumn) || findBestId(d);
+                        const currentDrataId = rawId ? String(rawId) : (getColumnValue(d, state.drata.selectedColumn) || '');
+                        return currentDrataId === dId;
+                    });
+                    return control ? getColumnValue(control, state.drata.selectedColumn) : '';
+                }).filter(t => t);
+
+                const combinedDrataText = drataTexts.map((t, i) => `Control ${i + 1}: ${t}`).join('\n\n');
+
+                const template = state.aiGroupPromptTemplate || DEFAULT_AI_GROUP_PROMPT_TEMPLATE;
+
+                const prompt = template
+                    .replace('{{customText}}', customText)
+                    .replace('{{controlLibraryList}}', combinedDrataText);
+
+                let result = '';
+                if (state.aiProvider === 'gemini') {
+                    const model = state.aiModel || 'gemini-1.5-flash';
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.geminiApiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }]
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.candidates && data.candidates[0].content.parts[0].text) {
+                        result = data.candidates[0].content.parts[0].text.trim();
+                    }
+                } else if (state.aiProvider === 'openai') {
+                    const baseUrl = state.aiBaseUrl || 'https://api.openai.com/v1';
+                    const model = state.aiModel || 'gpt-4o';
+                    const response = await fetch(`${baseUrl}/chat/completions`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${state.geminiApiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: model,
+                            messages: [
+                                { role: 'system', content: 'You are a security compliance expert specialized in control mapping.' },
+                                { role: 'user', content: prompt }
+                            ],
+                            temperature: 0.2
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.choices && data.choices[0].message.content) {
+                        result = data.choices[0].message.content.trim();
+                    }
+                }
+
+                if (result) {
+                    state.groupComments[customId] = result;
+                    saveState();
+                    renderMappingTable();
+                }
+            } catch (error) {
+                console.error("Group Gap Analysis Error:", error);
+                state.groupComments[customId] = "⚠️ Analysis failed. Check API key or connection.";
+                renderMappingTable();
+            }
+        }
+
+    async function runGapAnalysis(customId, drataId, drataText, customText, triggerRender = true) {
+        const commentKey = `${customId}-${drataId}`;
+
+        try {
+            // Use custom template if available, otherwise fallback to default
+            const template = state.aiPromptTemplate || DEFAULT_AI_PROMPT_TEMPLATE;
+
+            const prompt = template
+                .replace(/{{customText}}/g, customText)
+                .replace(/{{controlLibraryText}}/g, drataText);
+
+            let result = '';
+            if (state.aiProvider === 'gemini') {
+                const model = state.aiModel || 'gemini-1.5-flash';
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.geminiApiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.candidates && data.candidates[0].content.parts[0].text) {
+                    result = data.candidates[0].content.parts[0].text.trim();
+                } else {
+                    throw new Error("Invalid Gemini response");
+                }
+            } else if (state.aiProvider === 'openai') {
+                const baseUrl = state.aiBaseUrl || 'https://api.openai.com/v1';
+                const model = state.aiModel || 'gpt-4o';
+                const response = await fetch(`${baseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${state.geminiApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: 'system', content: 'You are a security compliance expert specialized in control mapping.' },
+                            { role: 'user', content: prompt }
+                        ],
+                        temperature: 0.2
+                    })
+                });
+
+                const data = await response.json();
+                if (data.choices && data.choices[0].message.content) {
+                    result = data.choices[0].message.content.trim();
+                } else {
+                    throw new Error("Invalid OpenAI response");
+                }
+            }
+
+            if (result) {
+                state.comments[commentKey] = result;
+                saveState();
+                renderMappingTable(); // Refresh table to show results
+            }
+        } catch (error) {
+            console.error("Gap Analysis Error:", error);
+            state.comments[commentKey] = "⚠️ Analysis failed. Check API key or connection.";
+            renderMappingTable();
+        }
     }
 
     // File Upload Handlers
@@ -859,47 +1335,115 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
 
-                    // Assume first sheet
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-
-                    // Convert to JSON
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-                    if (jsonData.length > 0) {
-                        state[type].data = jsonData;
-                        const columns = Object.keys(jsonData[0]);
-                        state[type].columns = columns;
-
-                        // Smart auto-detection for Drata
-                        if (type === 'drata') {
-                            const idTerms = ['id', 'reference', 'ref', 'code', 'number', 'ctrl', 'control id'];
-                            const descTerms = ['description', 'text', 'title', 'name', 'control text'];
-
-                            state.drata.idColumn = columns.find(c => idTerms.some(term => c.toLowerCase().includes(term))) || columns[0];
-                            state.drata.selectedColumn = columns.find(c => descTerms.some(term => c.toLowerCase().includes(term))) || columns[0];
-                        } else {
-                            const idTerms = ['id', 'reference', 'ref', 'code', 'number', 'ctrl', 'control id'];
-                            const descTerms = ['description', 'text', 'title', 'name', 'control text'];
-
-                            state.custom.idColumn = columns.find(c => idTerms.some(term => c.toLowerCase().includes(term))) || columns[0];
-                            state.custom.selectedColumn = columns.find(c => descTerms.some(term => c.toLowerCase().includes(term))) || columns[0];
-                        }
-
-                        updateUI(type);
-                        saveState();
-                    } else {
-                        alert('No data found in file');
-                    }
+                    showSheetSelector(workbook, type);
                 } catch (parseError) {
                     console.error("File Parse Error:", parseError);
                     alert('Error parsing Excel file. Please ensure it is a valid .xlsx or .xls file.');
+                    updateUI(type); // Reset status
                 }
             };
             reader.readAsArrayBuffer(file);
         } catch (uploadError) {
             console.error("Upload Error:", uploadError);
             alert('File upload failed. Check the console for details.');
+        }
+    }
+
+    function showSheetSelector(workbook, type) {
+        sheetList.innerHTML = '';
+        workbook.SheetNames.forEach((name, index) => {
+            const item = document.createElement('div');
+            item.className = 'sheet-item';
+            item.innerHTML = `
+                <input type="checkbox" id="sheet-${index}" value="${name}" ${index === 0 ? 'checked' : ''}>
+                <label for="sheet-${index}">${name}</label>
+            `;
+            item.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'INPUT') {
+                    const checkbox = item.querySelector('input');
+                    checkbox.checked = !checkbox.checked;
+                }
+            });
+            sheetList.appendChild(item);
+        });
+
+        headerRowInput.value = 1; // Reset to default
+        sheetModal.style.display = 'flex';
+
+        // Clear previous listeners by cloning fresh from the DOM
+        const oldConfirmBtn = document.getElementById('confirm-load-btn');
+        const oldCancelBtn = document.getElementById('cancel-load-btn');
+        const oldCloseBtn = document.getElementById('close-sheet-modal');
+
+        const newConfirmBtn = oldConfirmBtn.cloneNode(true);
+        const newCancelBtn = oldCancelBtn.cloneNode(true);
+        const newCloseBtn = oldCloseBtn.cloneNode(true);
+
+        oldConfirmBtn.parentNode.replaceChild(newConfirmBtn, oldConfirmBtn);
+        oldCancelBtn.parentNode.replaceChild(newCancelBtn, oldCancelBtn);
+        oldCloseBtn.parentNode.replaceChild(newCloseBtn, oldCloseBtn);
+
+        newConfirmBtn.addEventListener('click', () => {
+            const selectedSheets = Array.from(sheetList.querySelectorAll('input:checked')).map(cb => cb.value);
+            if (selectedSheets.length === 0) {
+                alert('Please select at least one tab to load.');
+                return;
+            }
+            const headerRow = parseInt(headerRowInput.value) || 1;
+            sheetModal.style.display = 'none';
+            processSheets(workbook, selectedSheets, type, headerRow);
+        });
+
+        const closeModal = () => {
+            sheetModal.style.display = 'none';
+            updateUI(type); // Reset status
+        };
+
+        newCancelBtn.addEventListener('click', closeModal);
+        newCloseBtn.addEventListener('click', closeModal);
+    }
+
+    function processSheets(workbook, selectedSheets, type, headerRow = 1) {
+        try {
+            let combinedData = [];
+            selectedSheets.forEach(sheetName => {
+                const worksheet = workbook.Sheets[sheetName];
+                // range: headerRow - 1 because SheetJS uses 0-indexed rows
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: headerRow - 1 });
+                combinedData = combinedData.concat(jsonData);
+            });
+
+            if (combinedData.length > 0) {
+                console.log(`[processSheets] Data loaded: ${combinedData.length} rows`);
+                state[type].data = combinedData;
+
+                // Get all columns from all rows to ensure nothing is missed
+                const allColumns = new Set();
+                combinedData.forEach(row => {
+                    Object.keys(row).forEach(key => allColumns.add(key));
+                });
+                const columns = Array.from(allColumns);
+                console.log(`[processSheets] Columns detected:`, columns);
+                state[type].columns = columns;
+
+                // Smart auto-detection
+                const idTerms = ['id', 'reference', 'ref', 'code', 'number', 'ctrl', 'control id'];
+                const descTerms = ['description', 'text', 'title', 'name', 'control text'];
+
+                state[type].idColumn = columns.find(c => idTerms.some(term => String(c).toLowerCase().includes(term))) || columns[0];
+                state[type].selectedColumn = columns.find(c => descTerms.some(term => String(c).toLowerCase().includes(term))) || columns[0];
+
+                console.log(`[processSheets] Calling updateUI(${type})`);
+                updateUI(type);
+                saveState();
+            } else {
+                alert('No data found in the selected tab(s).');
+                updateUI(type);
+            }
+        } catch (error) {
+            console.error("Processing Error:", error);
+            alert('Error processing selected sheets.');
+            updateUI(type);
         }
     }
 
@@ -995,15 +1539,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const columns = item.columns;
         const rows = item.data.slice(0, 5); // Just show first 5
 
-        let html = '<thead><tr>';
-        columns.forEach(col => {
+        // Create colgroups for direct width control
+        let colgroupHtml = '<colgroup>';
+        columns.forEach((_, idx) => {
+            colgroupHtml += `<col id="${type}-preview-col-${idx}" style="width: 200px;">`;
+        });
+        colgroupHtml += '</colgroup>';
+
+        let html = colgroupHtml + '<thead><tr>';
+        columns.forEach((col, idx) => {
             const isSelected = col === item.selectedColumn;
             const isId = type === 'drata' && col === item.idColumn;
             let cls = '';
             if (isSelected) cls = 'preview-selected';
             if (isId) cls = (cls ? cls + ' ' : '') + 'preview-id';
 
-            html += `<th class="${cls}">${col}${isSelected ? ' (Desc)' : ''}${isId ? ' (ID)' : ''}</th>`;
+            html += `<th class="${cls}" data-col-index="${idx}">${col}${isSelected ? ' (Desc)' : ''}${isId ? ' (ID)' : ''}<div class="resizer"></div></th>`;
         });
         html += '</tr></thead><tbody>';
 
@@ -1025,6 +1576,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         html += '</tbody>';
         table.innerHTML = html;
+
+        // Initialize resizers for this specific table
+        initTableResizers(table, type + '-preview-col');
     }
 
     function updateSummary() {
@@ -1040,8 +1594,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Persistence Logic
     function saveState() {
         // We only save metadata and selections to LocalStorage to avoid quota issues with large datasets
-        const { drata, custom, mappings, comments, threshold, activeTab, stopwords, columnWidths, aiEnabled, modelSource, customHost } = state;
-        const stateToSave = { drata, custom, mappings, comments, threshold, activeTab, stopwords, columnWidths, aiEnabled, modelSource, customHost };
+        const { drata, custom, mappings, comments, threshold, activeTab, stopwords, columnWidths, aiEnabled, modelSource, customHost, gapAnalysisEnabled, geminiApiKey, aiProvider, aiBaseUrl, aiModel, aiPromptTemplate, aiGroupPromptTemplate, autoLoadModel } = state;
+        const stateToSave = { drata, custom, mappings, comments, threshold, activeTab, stopwords, columnWidths, aiEnabled, modelSource, customHost, gapAnalysisEnabled, geminiApiKey, aiProvider, aiBaseUrl, aiModel, aiPromptTemplate, aiGroupPromptTemplate, autoLoadModel };
 
         try {
             localStorage.setItem('controlMapperState', JSON.stringify(stateToSave));
@@ -1062,10 +1616,44 @@ document.addEventListener('DOMContentLoaded', () => {
             const parsed = JSON.parse(saved);
             Object.assign(state, parsed);
 
+            // Enforce defaults if saved as empty strings
+            if (!state.aiPromptTemplate) state.aiPromptTemplate = DEFAULT_AI_PROMPT_TEMPLATE;
+            if (!state.aiGroupPromptTemplate) state.aiGroupPromptTemplate = DEFAULT_AI_GROUP_PROMPT_TEMPLATE;
+
+            // Migration: update old drata placeholders
+            if (state.aiPromptTemplate) {
+                state.aiPromptTemplate = state.aiPromptTemplate.replace(/{{drataText}}/g, '{{controlLibraryText}}');
+            }
+            if (state.aiGroupPromptTemplate) {
+                state.aiGroupPromptTemplate = state.aiGroupPromptTemplate.replace(/{{drataControlsList}}/g, '{{controlLibraryList}}');
+            }
+
+            // Migration: convert old single mappings (string) to arrays
+            if (state.mappings) {
+                Object.keys(state.mappings).forEach(key => {
+                    if (typeof state.mappings[key] === 'string') {
+                        state.mappings[key] = [state.mappings[key]];
+                    }
+                });
+            }
+
             // Sync UI Elements
             if (topXInput) topXInput.value = state.topX || 5;
             if (sortBySelect) sortBySelect.value = state.sortBy || 'semantic';
             if (aiToggle) aiToggle.checked = state.aiEnabled !== undefined ? state.aiEnabled : true;
+            if (gapAnalysisToggle) gapAnalysisToggle.checked = state.gapAnalysisEnabled || false;
+            if (geminiApiKeyInput) geminiApiKeyInput.value = state.geminiApiKey || '';
+            if (aiProviderSelect) {
+                aiProviderSelect.value = state.aiProvider || 'gemini';
+                if (aiBaseUrlContainer) {
+                    aiBaseUrlContainer.style.display = aiProviderSelect.value === 'openai' ? 'flex' : 'none';
+                }
+            }
+            if (aiBaseUrlInput) aiBaseUrlInput.value = state.aiBaseUrl || '';
+            if (aiModelNameInput) aiModelNameInput.value = state.aiModel || (state.aiProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o');
+            if (aiPromptTemplateInput) aiPromptTemplateInput.value = state.aiPromptTemplate || '';
+            if (aiGroupPromptTemplateInput) aiGroupPromptTemplateInput.value = state.aiGroupPromptTemplate || '';
+            if (autoLoadToggle) autoLoadToggle.checked = state.autoLoadModel !== undefined ? state.autoLoadModel : true;
 
             if (state.drata.data) updateUI('drata');
             if (state.custom.data) updateUI('custom');
@@ -1075,14 +1663,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderMappingTable();
                 applySavedColumnWidths();
             }
+
+            // Automatic background loading
+            if (state.autoLoadModel !== false && state.aiEnabled) {
+                console.log("Auto-loading AI model in background...");
+                initSemanticPipeline();
+            }
         }
         initResizableColumns();
     }
 
     function initResizableColumns() {
         const table = document.getElementById('mapping-table');
-        if (!table) return; // Guard against missing table
+        if (!table) return;
+        initTableResizers(table, 'col');
+    }
 
+    function initTableResizers(table, colIdPrefix) {
         const resizers = table.querySelectorAll('.resizer');
 
         resizers.forEach(resizer => {
@@ -1090,7 +1687,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const colIndex = th.getAttribute('data-col-index');
             if (colIndex === null) return;
 
-            const colEl = document.getElementById(`col-${colIndex}`);
+            const colEl = document.getElementById(`${colIdPrefix}-${colIndex}`);
 
             resizer.addEventListener('mousedown', (e) => {
                 e.preventDefault();
@@ -1103,7 +1700,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const width = startWidth + (moveEvent.pageX - startX);
                     if (width > 40) { // Min width
                         colEl.style.width = width + 'px';
-                        state.columnWidths[`col-${colIndex}`] = width + 'px';
+                        if (colIdPrefix === 'col') { // Only save state for mapping table
+                            state.columnWidths[`col-${colIndex}`] = width + 'px';
+                        }
                     }
                 };
 
@@ -1111,7 +1710,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     resizer.classList.remove('resizing');
                     document.removeEventListener('mousemove', onMouseMove);
                     document.removeEventListener('mouseup', onMouseUp);
-                    saveState();
+                    if (colIdPrefix === 'col') saveState();
                 };
 
                 document.addEventListener('mousemove', onMouseMove);

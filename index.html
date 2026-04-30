@@ -33,24 +33,235 @@
             <div class="logo">
                 <span class="logo-icon">∞</span>
                 <h1>ControlMapper</h1>
+                <div id="header-ai-status" class="header-ai-status" style="display: none;">
+                    <span class="spinner-small"></span>
+                    <span class="status-text">Starting AI...</span>
+                </div>
             </div>
             <nav class="tabs">
-                <button class="tab-btn active" data-tab="upload">Upload</button>
-                <button class="tab-btn" data-tab="mapping">Mapping</button>
+                <button class="tab-btn active" data-tab="readme">Read Me</button>
                 <button class="tab-btn" data-tab="settings">Settings</button>
+                <button class="tab-btn" data-tab="upload">Upload</button>
+                <button class="tab-btn" data-tab="mapping">Mapping</button>
             </nav>
         </header>
 
         <main class="content">
-            <section id="upload" class="tab-content active">
+            <section id="readme" class="tab-content active">
+                <div class="card">
+                    <h2>About ControlMapper</h2>
+                    <p style="margin-bottom: 1rem;"><strong>Problem Statement:</strong> There are many scenarios where a
+                        Governance, Risk and Compliance practictioner needs to map a control against a set of controls.
+                        For example, mapping a regulatory requirement against an existing control library. This often
+                        involves identifying similar
+                        controls within the control library, and if applicable, modify the existing controls in the
+                        control library to meet the
+                        requirements.</p>
+                    <p style="margin-bottom: 1rem;"><strong>Objective:</strong> ControlMapper is designed to help users
+                        map <em>Custom Controls</em> to an existing <em>Control Library</em>. It achieves
+                        this by looking for the most similar combinations using
+                        both keyword (word overlap) and semantic (words with similar meaning) algorithms. The tool does
+                        not map the controls, rather it helps users to identify similar controls and users are the ones
+                        to do the mapping.</p>
+
+                    <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--text-main);">Key Features</h3>
+                    <ul style="margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-muted); line-height: 1.6;">
+                        <li><strong>Similarity Scoring:</strong> Combines keyword matching and semantic
+                            meaning matching to find the most relevant controls.</li>
+                        <li><strong>Adjustable Weights:</strong> Adjust the % weightage between Keyword and
+                            Semantic scores.</li>
+                        <li><strong>Local Semantic Matching:</strong> Semantic matching models are downloaded
+                            and run entirely locally within your browser!</li>
+                        <li><strong>Generative AI Gap Analysis:</strong> Only if enabled, note this will send data to
+                            LLMs - Uses Large Language Models (LLMs) to automatically detect and summarize gaps between
+                            your mapped controls.</li>
+                    </ul>
+
+                    <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--text-main);">How to Use</h3>
+                    <ol style="margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-muted); line-height: 1.6;">
+                        <li><strong>Enable Local Semantic Matchingx</strong> The tool uses a local Transformer model for
+                            semantics comparison. Go to the <em>Settings</em> tab, ensure AI matching is enabled, and
+                            click <em>Initialize / Re-download AI Model</em> to load the model into your browser cache
+                            (requires initial internet connection). Initial model download will require a bit of time.
+                            Model used: all-MiniLM-L6-v2. There are 3 sources: Hugging Face, its Mirror Source, and
+                            local. If Hugging Face and its Mirror Source are both blocked, download the model separately
+                            and save it in the same folder as the tool. </li>
+                        <li><strong>Upload Data:</strong> Navigate to the <em>Upload</em> tab. Upload your Control
+                            Library and Custom Controls data (Excel format). Select which columns contain the IDs and
+                            Descriptions. The "Descriptions" column is used for similarity matching.</li>
+                        <li><strong>Configure LLM Gap Analysis (Optional):</strong> If you want AI to generate text
+                            summarizing the gaps, it requires an API key. Go to the <em>Settings</em> tab, enable AI Gap
+                            Analysis, select your provider, and input your API key (e.g. Gemini or OpenAI). You can also
+                            customize the AI prompts here.</li>
+                        <li><strong>Map Controls:</strong> Navigate to the <em>Mapping</em> tab to view similarities.
+                            Click <em>Trigger LLM Analysis</em> on individual items or use <em>Group Analyze</em> for
+                            combinations.</li>
+                        <li><strong>Export:</strong> Once satisfied with your mappings and generated gap analyses, click
+                            the <em>Download Results</em> button to export everything to Excel.</li>
+                    </ol>
+                </div>
+            </section>
+
+            <section id="settings" class="tab-content">
+                <div class="card settings-card">
+                    <div class="settings-card">
+                        <div class="toggle-container" style="margin-bottom: 1rem;">
+                            <label class="switch-label">
+                                <span>Model Source</span>
+                                <small>Choose where to download the AI model from.</small>
+                            </label>
+                            <select id="model-source-select" class="upload-btn"
+                                style="width: auto; background: var(--bg-dark);">
+                                <option value="https://huggingface.co">Hugging Face (Global)</option>
+                                <option value="https://hf-mirror.com">HF Mirror (China/Alternative)</option>
+                                <option value="local">Local Folder (Self-hosted)</option>
+                                <option value="custom">Custom URL...</option>
+                            </select>
+                        </div>
+
+                        <div id="custom-host-container" class="toggle-container"
+                            style="display: none; margin-bottom: 1rem;">
+                            <label class="switch-label">
+                                <span>Custom Host URL</span>
+                            </label>
+                            <input type="text" id="custom-host-url" placeholder="https://your-mirror.com"
+                                style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 5px 10px; border-radius: 4px; flex-grow: 1; margin-left: 20px;">
+                        </div>
+
+                        <div class="toggle-container">
+                            <label class="switch-label" for="ai-toggle">
+                                <span>Enable Semantic Matching (AI)</span>
+                                <small>Uses vector embeddings to find matches by meaning. Requires internet
+                                    connection.</small>
+                            </label>
+                            <label class="switch">
+                                <input type="checkbox" id="ai-toggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-container" style="margin-top: 1rem;">
+                            <label class="switch-label" for="auto-load-toggle">
+                                <span>Auto-load AI Model</span>
+                                <small>Automatically start loading the AI model when the website opens.</small>
+                            </label>
+                            <label class="switch">
+                                <input type="checkbox" id="auto-load-toggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+
+                        <div class="settings-divider"
+                            style="margin: 1.5rem 0; border-top: 1px solid var(--border-color);"></div>
+
+                        <div class="settings-group">
+                            <div class="settings-group">
+                                <label
+                                    style="color: var(--primary); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.05em; text-transform: uppercase;">Generative
+                                    AI Features</label>
+                                <div class="toggle-container" style="margin-top: 1rem;">
+                                    <label class="switch-label" for="gap-analysis-toggle">
+                                        <span>Enable AI Gap Analysis</span>
+                                        <small>Automatically generates comments about gaps between controls when mapped
+                                            (requires API Key).</small>
+                                    </label>
+                                    <label class="switch">
+                                        <input type="checkbox" id="gap-analysis-toggle">
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-container" style="margin-top: 1rem;">
+                                    <label class="switch-label">
+                                        <span>AI Provider</span>
+                                        <small>Choose your Generative AI model provider.</small>
+                                    </label>
+                                    <select id="ai-provider-select" class="upload-btn"
+                                        style="width: auto; background: var(--bg-dark);">
+                                        <option value="gemini">Google Gemini</option>
+                                        <option value="openai">OpenAI / Compatible</option>
+                                    </select>
+                                </div>
+
+                                <div id="api-key-container" class="toggle-container" style="margin-top: 1rem;">
+                                    <label class="switch-label">
+                                        <span>API Key</span>
+                                        <small>Stored locally in your browser.</small>
+                                    </label>
+                                    <input type="password" id="gemini-api-key" placeholder="Enter API Key"
+                                        style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; width: 300px; font-family: monospace;">
+                                </div>
+
+                                <div id="ai-base-url-container" class="toggle-container"
+                                    style="display: none; margin-top: 1rem;">
+                                    <label class="switch-label">
+                                        <span>Base URL</span>
+                                        <small>Override endpoint for OpenAI-compatible APIs.</small>
+                                    </label>
+                                    <input type="text" id="ai-base-url" placeholder="https://api.openai.com/v1"
+                                        style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; width: 300px;">
+                                </div>
+
+                                <div id="ai-model-container" class="toggle-container" style="margin-top: 1rem;">
+                                    <label class="switch-label">
+                                        <span>Model Name</span>
+                                        <small>e.g., gemini-1.5-flash or gpt-4o</small>
+                                    </label>
+                                    <input type="text" id="ai-model-name" placeholder="gemini-1.5-flash"
+                                        style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; width: 300px;">
+                                </div>
+
+                                <div class="toggle-container"
+                                    style="margin-top: 1rem; flex-direction: column; align-items: flex-start;">
+                                    <label class="switch-label" style="margin-bottom: 0.5rem;">
+                                        <span>Gap Analysis Prompt Template</span>
+                                        <small>Customize how the AI analyzes control differences. Use
+                                            <code>{{customText}}</code> and <code>{{controlLibraryText}}</code> as
+                                            placeholders.</small>
+                                    </label>
+                                    <textarea id="ai-prompt-template"
+                                        style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; width: 100%; min-height: 150px; font-family: inherit; font-size: 0.9rem; resize: vertical;"
+                                        placeholder="Enter your custom prompt template..."></textarea>
+                                </div>
+
+                                <div class="toggle-container"
+                                    style="margin-top: 1rem; flex-direction: column; align-items: flex-start;">
+                                    <label class="switch-label" style="margin-bottom: 0.5rem;">
+                                        <span>Group Analysis Prompt Template</span>
+                                        <small>Customize how the AI analyzes combined control coverage. Use
+                                            <code>{{customText}}</code> and <code>{{controlLibraryList}}</code> as
+                                            placeholders.</small>
+                                    </label>
+                                    <textarea id="ai-group-prompt-template"
+                                        style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; width: 100%; min-height: 150px; font-family: inherit; font-size: 0.9rem; resize: vertical;"
+                                        placeholder="Enter your custom group analysis prompt template..."></textarea>
+                                </div>
+                            </div>
+
+                            <button id="download-ai-btn" class="upload-btn"
+                                style="margin-top: 1rem; width: auto; font-size: 0.8rem; padding: 6px 16px;">
+                                📥 Initialize / Re-download AI Model
+                            </button>
+                        </div>
+
+                        <div class="settings-group">
+                            <label for="stopwords-area">Ignore Common Words (Stopwords)</label>
+                            <p class="card-subtext">Words listed here will be ignored during similarity calculation.</p>
+                            <textarea id="stopwords-area" rows="10"></textarea>
+                        </div>
+                        <button id="save-settings-btn" class="upload-btn">Save Settings</button>
+                    </div>
+            </section>
+
+            <section id="upload" class="tab-content">
                 <div class="grid-container">
-                    <!-- Drata Controls Upload -->
+                    <!-- Control Library Upload -->
                     <div class="card upload-card" id="drata-card">
                         <div class="card-header">
-                            <h2>1. Drata Controls</h2>
+                            <h2>1. Control Library</h2>
                             <span class="status-badge" id="drata-status">Empty</span>
                         </div>
-                        <p class="card-subtext">Upload the full set of Drata controls (Excel format).</p>
+                        <p class="card-subtext">Upload Control Library (Excel format).</p>
                         <div class="drop-zone" id="drata-drop-zone">
                             <input type="file" id="drata-file" accept=".xlsx, .xls, .csv" hidden>
                             <label for="drata-file" class="upload-btn">
@@ -87,10 +298,10 @@
                     <!-- Custom Controls Upload -->
                     <div class="card upload-card" id="custom-card">
                         <div class="card-header">
-                            <h2>2. Custom Control Set</h2>
+                            <h2>2. Custom Controls</h2>
                             <span class="status-badge" id="custom-status">Empty</span>
                         </div>
-                        <p class="card-subtext">Upload your custom control set (e.g., CPS 234).</p>
+                        <p class="card-subtext">Upload Custom Controls (e.g., CPS 234).</p>
                         <div class="drop-zone" id="custom-drop-zone">
                             <input type="file" id="custom-file" accept=".xlsx, .xls, .csv" hidden>
                             <label for="custom-file" class="upload-btn">
@@ -128,8 +339,8 @@
                 <div class="summary-section" id="comparison-summary" style="display:none;">
                     <div class="summary-info">
                         <h3>Configuration Ready</h3>
-                        <p>Comparing <strong id="drata-col-preview">None</strong> from Drata to <strong
-                                id="custom-col-preview">None</strong> from Custom.</p>
+                        <p>Comparing <strong id="drata-col-preview">None</strong> from Control Library to <strong
+                                id="custom-col-preview">None</strong> from Custom Controls.</p>
                     </div>
                 </div>
             </section>
@@ -175,6 +386,23 @@
                                 </svg>
                                 Refresh Suggestions
                             </button>
+                            <div class="bulk-actions"
+                                style="display: flex; align-items: center; gap: 8px; margin-right: 8px;">
+                                <label for="bulk-limit-input"
+                                    style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">Analyze
+                                    Top:</label>
+                                <input type="number" id="bulk-limit-input" value="10" min="1" max="1000"
+                                    style="width: 60px; background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px;">
+                                <button id="bulk-gap-btn" class="upload-btn primary-btn"
+                                    style="background: #8b5cf6; padding: 6px 16px;">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 8px;">
+                                        <path d="M12 2L12 10M12 10L9 7M12 10L15 7" stroke="currentColor"
+                                            stroke-width="2" fill="none" />
+                                        <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" fill="none" />
+                                    </svg>
+                                    🤖 Bulk Analyze Gaps
+                                </button>
+                            </div>
                             <button id="download-results-btn" class="upload-btn primary-btn">
                                 <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right: 8px;">
                                     <path d="M12 16L12 8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
@@ -198,6 +426,8 @@
                                     <col id="col-5" style="width: 800px;">
                                     <col id="col-6" style="width: 120px;">
                                     <col id="col-7" style="width: 250px;">
+                                    <col id="col-8" style="width: 100px;">
+                                    <col id="col-9" style="width: 400px;">
                                 </colgroup>
                                 <thead>
                                     <tr>
@@ -217,20 +447,27 @@
                                         </th>
                                         <th class="col-id" data-col-index="4">ID<div class="resizer"></div>
                                         </th>
-                                        <th class="col-control" data-col-index="5">Drata Control Text<div
+                                        <th class="col-control" data-col-index="5">Control Library Text<div
                                                 class="resizer">
                                             </div>
                                         </th>
-                                        <th class="col-select" data-col-index="6">Action<div class="resizer">
+                                        <th class="col-select" data-col-index="6">Trigger LLM Analysis<div
+                                                class="resizer">
                                             </div>
                                         </th>
-                                        <th class="col-comments" data-col-index="7">Comments<div class="resizer"></div>
+                                        <th class="col-comments" data-col-index="7">LLM Gap Analysis<div
+                                                class="resizer"></div>
+                                        </th>
+                                        <th class="col-mapped" data-col-index="8">Mapped?<div class="resizer"></div>
+                                        </th>
+                                        <th class="col-group-analysis" data-col-index="9">Grouped Analysis<div
+                                                class="resizer"></div>
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody id="mapping-body">
                                     <tr>
-                                        <td colspan="8" class="empty-state">Load files in Upload tab first</td>
+                                        <td colspan="10" class="empty-state">Load files in Upload tab first</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -238,63 +475,43 @@
                     </div>
             </section>
 
-            <section id="settings" class="tab-content">
-                <div class="card settings-card">
-                    <div class="settings-card">
-                        <div class="toggle-container" style="margin-bottom: 1rem;">
-                            <label class="switch-label">
-                                <span>Model Source</span>
-                                <small>Choose where to download the AI model from.</small>
-                            </label>
-                            <select id="model-source-select" class="upload-btn"
-                                style="width: auto; background: var(--bg-dark);">
-                                <option value="https://huggingface.co">Hugging Face (Global)</option>
-                                <option value="https://hf-mirror.com">HF Mirror (China/Alternative)</option>
-                                <option value="local">Local Folder (Self-hosted)</option>
-                                <option value="custom">Custom URL...</option>
-                            </select>
-                        </div>
-
-                        <div id="custom-host-container" class="toggle-container"
-                            style="display: none; margin-bottom: 1rem;">
-                            <label class="switch-label">
-                                <span>Custom Host URL</span>
-                            </label>
-                            <input type="text" id="custom-host-url" placeholder="https://your-mirror.com"
-                                style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 5px 10px; border-radius: 4px; flex-grow: 1; margin-left: 20px;">
-                        </div>
-
-                        <div class="toggle-container">
-                            <label class="switch-label" for="ai-toggle">
-                                <span>Enable Semantic Matching (AI)</span>
-                                <small>Uses vector embeddings to find matches by meaning. Requires internet
-                                    connection.</small>
-                            </label>
-                            <label class="switch">
-                                <input type="checkbox" id="ai-toggle" checked>
-                                <span class="slider round"></span>
-                            </label>
-                        </div>
-                        <button id="download-ai-btn" class="upload-btn"
-                            style="margin-top: 1rem; width: auto; font-size: 0.8rem; padding: 6px 16px;">
-                            📥 Initialize / Re-download AI Model
-                        </button>
-                    </div>
-
-                    <div class="settings-group">
-                        <label for="stopwords-area">Ignore Common Words (Stopwords)</label>
-                        <p class="card-subtext">Words listed here will be ignored during similarity calculation.</p>
-                        <textarea id="stopwords-area" rows="10"></textarea>
-                    </div>
-                    <button id="save-settings-btn" class="upload-btn">Save Settings</button>
-                </div>
-            </section>
         </main>
 
         <footer>
-            <p>&copy; 2026 ControlMapper Professional. Securely stored in-browser.</p>
+            <p>&copy; 2026 ControlMapper ver1.0<v1 class="0"></v1>
+            </p>
         </footer>
     </div>
+    <!-- Sheet Selection Modal -->
+    <div id="sheet-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Configure Data Load</h3>
+                <button id="close-sheet-modal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Select which tabs to include and specify the header row:</p>
+                <div id="sheet-list" class="sheet-checklist">
+                    <!-- Sheets will be populated here -->
+                </div>
+                <div class="header-row-selection"
+                    style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border-color);">
+                    <label for="header-row-input"
+                        style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-main);">Header
+                        Row Number:</label>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">Which row contains
+                        the column headers? (Usually 1)</p>
+                    <input type="number" id="header-row-input" min="1" value="1" class="number-input"
+                        style="width: 80px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-load-btn" class="upload-btn">Cancel</button>
+                <button id="confirm-load-btn" class="upload-btn primary-btn">Load Selected</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 
