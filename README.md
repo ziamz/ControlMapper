@@ -1,53 +1,60 @@
 # ControlMapper Installation & Setup Guide
 
-ControlMapper is a secure, browser-based tool for mapping Custom Controls to Control Library using keyword and AI-powered semantic matching.
+ControlMapper is a secure, browser-based tool for mapping Custom Controls to a Control Library using keyword and transformer-based semantic matching.
 
 ## Prerequisites
 
 - **Modern Web Browser**: Chrome, Edge, or Firefox (recommended).
-- **Python or Node.js**: Required to run a simple local web server (to handle ES modules and browser security).
-- **Internet Connection**: Required for the initial download of the AI Semantic Model (cached after first use) and to load dependencies from CDNs.
+- **Internet Connection**: Required for first-time model download (unless using local model files).
+- **Optional local server tools**: Python, Node.js, or VS Code Live Server (only needed if your environment blocks direct `file://` execution).
 
-## Quick Start (Installation)
+## Quick Start
 
 To set up ControlMapper on a new laptop:
 
-1.  **Copy Files**: Copy the following files/folders from the source machine to a folder on the new laptop:
-    - `index.html`
-    - `app.js`
-    - `styles.css`
-    - `models/` (Optional: if you want to include the AI model files localy)
+1. **Copy Files**:
+   - `index.html`
+   - `app.js`
+   - `styles.css`
+   - `models/` (optional, if you want local/self-hosted model files)
 
-2.  **Start a Local Server**:
-    Because the tool uses ES Modules and requires a secure context for some AI features, you **cannot** simply double-click `index.html`. You must run it through a web server.
+2. **Launch the app**:
+   - Open `index.html` directly in your browser (double-click or open with browser).
 
-    **Option A: Using Python (Easiest)**
-    Open a terminal/command prompt in the project folder and run:
-    ```bash
-    python3 -m http.server 8000
-    ```
+3. **If direct open is blocked in your environment**, run a local server:
 
-    **Option B: Using Node.js (npx)**
-    If you have Node.js installed, run:
-    ```bash
-    npx serve .
-    ```
+   **Option A: Python**
+   ```bash
+   python -m http.server 8000
+   ```
 
-    **Option C: VS Code Live Server**
-    If you use VS Code, install the "Live Server" extension, right-click `index.html`, and select "Open with Live Server".
+   **Option B: Node.js**
+   ```bash
+   npx serve .
+   ```
 
-3.  **Access the Tool**:
-    Open your browser and go to:
-    `http://localhost:8000` (or the port provided by your server).
+   **Option C: VS Code Live Server**
+   - Right-click `index.html` and select **Open with Live Server**.
 
-## Using the AI Semantic Matching
+4. **Access URL (if using server)**:
+   - `http://localhost:8000` (or whichever port your server reports).
 
-- On the first run, the tool will attempt to download the AI model (~25MB) from Hugging Face.
-- **Corporate Firewalls**: If your network blocks Hugging Face, go to the **Settings** tab and change the **Model Source** to "HF Mirror" or "Local Folder" (if you copied the `models/` directory).
-- Once downloaded, the model is cached in your browser's IndexedDB for offline use.
+## Model Source Behavior
+
+- Default model source is **GitHub Repo (ziamz/ControlMapper)**.
+- You can switch source in **Settings > Model Source**:
+  - `GitHub Repo (ziamz/ControlMapper)`
+  - `Local Folder (Self-hosted)`
+  - `Custom URL...`
+- Model files are cached in browser storage after first successful load.
 
 ## Troubleshooting
 
-- **"File not found" or "CORS Error"**: Ensure you are running the tool via a local web server (`http://localhost`) and not opening the file directly (`file://`).
-- **AI Model Fails to Load**: Check your internet connection or try switching the Model Source in Settings.
-- **Excel Parsing Issues**: Ensure your files are in `.xlsx`, `.xls`, or `.csv` format.
+- **Model fails to load**:
+  - Check internet connection.
+  - Confirm selected model source in Settings.
+  - If using **Local Folder**, run via `http://localhost` instead of `file://` and ensure `models/` path exists.
+- **CORS or module loading issues**:
+  - Use one of the local server options above.
+- **Excel parsing issues**:
+  - Ensure files are in `.xlsx`, `.xls`, or `.csv` format.
