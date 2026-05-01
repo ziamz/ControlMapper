@@ -79,25 +79,26 @@
 
                     <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--text-main);">How to Use</h3>
                     <ol style="margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-muted); line-height: 1.6;">
-                        <li><strong>Enable Local Semantic Matchingx</strong> The tool uses a local Transformer model for
-                            semantics comparison. Go to the <em>Settings</em> tab, ensure AI matching is enabled, and
-                            click <em>Initialize / Re-download AI Model</em> to load the model into your browser cache
-                            (requires initial internet connection). Initial model download will require a bit of time.
-                            Model used: all-MiniLM-L6-v2. There are 3 sources: Hugging Face, its Mirror Source, and
-                            local. If Hugging Face and its Mirror Source are both blocked, download the model separately
-                            and save it in the same folder as the tool. </li>
+                        
                         <li><strong>Upload Data:</strong> Navigate to the <em>Upload</em> tab. Upload your Control
                             Library and Custom Controls data (Excel format). Select which columns contain the IDs and
                             Descriptions. The "Descriptions" column is used for similarity matching.</li>
-                        <li><strong>Configure LLM Gap Analysis (Optional):</strong> If you want AI to generate text
-                            summarizing the gaps, it requires an API key. Go to the <em>Settings</em> tab, enable AI Gap
+                        <li><strong>Local Semantic Matching</strong> The tool automatically downloads a local Transformer model for
+                                semantics comparison.  Initial model download will require a bit of time (2 minutes).
+                                Model used: all-MiniLM-L6-v2. If Github source is blocked, download the model separately from Github repo
+                                and save it in the same folder as the tool. </li>
+                        <li><strong>Map Controls:</strong> Navigate to the <em>Mapping</em> tab to view similar controls. 
+                            You can customize the number of top matches to manually review. Once you have decided on the control to map, click on Map.
+                                    </li>
+                        <li><strong>Configure LLM Gap Analysis (Optional):</strong> If you want LLM to perform Gap Analysis, 
+                            you need to input an API key. Go to the <em>Settings</em> tab, enable AI Gap
                             Analysis, select your provider, and input your API key (e.g. Gemini or OpenAI). You can also
-                            customize the AI prompts here.</li>
-                        <li><strong>Map Controls:</strong> Navigate to the <em>Mapping</em> tab to view similarities.
-                            Click <em>Trigger LLM Analysis</em> on individual items or use <em>Group Analyze</em> for
-                            combinations.</li>
-                        <li><strong>Export:</strong> Once satisfied with your mappings and generated gap analyses, click
-                            the <em>Download Results</em> button to export everything to Excel.</li>
+                            customize the AI prompts here. Once done, you can use the Gap Analysis feature (Click Trigger LLM Analysis) 
+                            to compare the 2 controls. If you map multiple controls, you can use the Group Analysis feature to compare these multiple controls
+                            against the control. </li>
+                        
+                        <li><strong>Export:</strong> You can click
+                            the <em>Download Results</em> button to export everything to Excel at any point in the process. You can choose to do the AI Analysis in the Tool then do the Mapping in Excel if it is easier.</li>
                     </ol>
                 </div>
             </section>
@@ -108,12 +109,10 @@
                         <div class="toggle-container" style="margin-bottom: 1rem;">
                             <label class="switch-label">
                                 <span>Model Source</span>
-                                <small>Choose where to download the AI model from.</small>
+                                <small>Choose where to download the Transformer from. Default is from Github.</small>
                             </label>
                             <select id="model-source-select" class="upload-btn"
                                 style="width: auto; background: var(--bg-dark);">
-                                <option value="https://huggingface.co">Hugging Face (Global)</option>
-                                <option value="https://hf-mirror.com">HF Mirror (China/Alternative)</option>
                                 <option value="local">Local Folder (Self-hosted)</option>
                                 <option value="github">GitHub Repo (ziamz/ControlMapper)</option>
                                 <option value="custom">Custom URL...</option>
@@ -127,29 +126,6 @@
                             </label>
                             <input type="text" id="custom-host-url" placeholder="https://your-mirror.com"
                                 style="background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 5px 10px; border-radius: 4px; flex-grow: 1; margin-left: 20px;">
-                        </div>
-
-                        <div class="toggle-container">
-                            <label class="switch-label" for="ai-toggle">
-                                <span>Enable Semantic Matching (AI)</span>
-                                <small>Uses vector embeddings to find matches by meaning. Requires internet
-                                    connection.</small>
-                            </label>
-                            <label class="switch">
-                                <input type="checkbox" id="ai-toggle" checked>
-                                <span class="slider round"></span>
-                            </label>
-                        </div>
-
-                        <div class="toggle-container" style="margin-top: 1rem;">
-                            <label class="switch-label" for="auto-load-toggle">
-                                <span>Auto-load AI Model</span>
-                                <small>Automatically start loading the AI model when the website opens.</small>
-                            </label>
-                            <label class="switch">
-                                <input type="checkbox" id="auto-load-toggle" checked>
-                                <span class="slider round"></span>
-                            </label>
                         </div>
 
                         <div class="settings-divider"
@@ -239,18 +215,8 @@
                                 </div>
                             </div>
 
-                            <button id="download-ai-btn" class="upload-btn"
-                                style="margin-top: 1rem; width: auto; font-size: 0.8rem; padding: 6px 16px;">
-                                📥 Initialize / Re-download AI Model
-                            </button>
                         </div>
 
-                        <div class="settings-group">
-                            <label for="stopwords-area">Ignore Common Words (Stopwords)</label>
-                            <p class="card-subtext">Words listed here will be ignored during similarity calculation.</p>
-                            <textarea id="stopwords-area" rows="10"></textarea>
-                        </div>
-                        <button id="save-settings-btn" class="upload-btn">Save Settings</button>
                     </div>
             </section>
 
@@ -284,7 +250,7 @@
                                 <select id="drata-id-column"></select>
                             </div>
                             <div class="selector-group">
-                                <label for="drata-column">Select Description column:</label>
+                                <label for="drata-column">Select column to compare:</label>
                                 <select id="drata-column"></select>
                             </div>
                         </div>
@@ -324,7 +290,7 @@
                                 <select id="custom-id-column"></select>
                             </div>
                             <div class="selector-group">
-                                <label for="custom-column">Select Description column:</label>
+                                <label for="custom-column">Select column to compare:</label>
                                 <select id="custom-column"></select>
                             </div>
                         </div>
@@ -351,11 +317,11 @@
                     <div class="table-actions">
                         <div class="mapping-controls">
                             <div class="control-group">
-                                <label for="top-x-input">Matches per control:</label>
+                                <label for="top-x-input">Number of top matches to show:</label>
                                 <input type="number" id="top-x-input" min="1" max="20" value="5" class="number-input">
                             </div>
                             <div class="control-group">
-                                <label for="sort-by-select">Prioritize by:</label>
+                                <label for="sort-by-select">Sort by:</label>
                                 <select id="sort-by-select" class="source-select">
                                     <option value="weighted">Weighted Avg %</option>
                                     <option value="semantic">Semantic %</option>
@@ -363,7 +329,7 @@
                                 </select>
                             </div>
                             <div class="control-group weight-slider-group">
-                                <label for="mapping-weight-slider">AI Weight: <span
+                                <label for="mapping-weight-slider">Weighted Average: <span
                                         id="weight-value-display">50</span>%</label>
                                 <div class="slider-wrapper">
                                     <span class="slider-hint">Keyword</span>
@@ -387,23 +353,6 @@
                                 </svg>
                                 Refresh Suggestions
                             </button>
-                            <div class="bulk-actions"
-                                style="display: flex; align-items: center; gap: 8px; margin-right: 8px;">
-                                <label for="bulk-limit-input"
-                                    style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">Analyze
-                                    Top:</label>
-                                <input type="number" id="bulk-limit-input" value="10" min="1" max="1000"
-                                    style="width: 60px; background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px;">
-                                <button id="bulk-gap-btn" class="upload-btn primary-btn"
-                                    style="background: #8b5cf6; padding: 6px 16px;">
-                                    <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 8px;">
-                                        <path d="M12 2L12 10M12 10L9 7M12 10L15 7" stroke="currentColor"
-                                            stroke-width="2" fill="none" />
-                                        <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" fill="none" />
-                                    </svg>
-                                    🤖 Bulk Analyze Gaps
-                                </button>
-                            </div>
                             <button id="download-results-btn" class="upload-btn primary-btn">
                                 <svg viewBox="0 0 24 24" width="20" height="20" style="margin-right: 8px;">
                                     <path d="M12 16L12 8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
@@ -473,6 +422,7 @@
                                 </tbody>
                             </table>
                         </div>
+
                     </div>
             </section>
 

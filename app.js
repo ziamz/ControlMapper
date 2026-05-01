@@ -250,6 +250,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 modelStatus.style.opacity = '1';
             }
         }
+
+        if (modelStatus) {
+            modelStatus.innerHTML = '✨ AI Analysis: complete';
+            modelStatus.style.display = 'flex';
+            modelStatus.style.opacity = '1';
+        }
     }
 
     function calculateScoresSync(customText, drataText) {
@@ -315,10 +321,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const topXInput = document.getElementById('top-x-input');
     const sortBySelect = document.getElementById('sort-by-select');
 
-    // DOM Elements - Settings
-    const stopwordsArea = document.getElementById('stopwords-area');
-    const saveSettingsBtn = document.getElementById('save-settings-btn');
-
     // DOM Elements - Mapping Table
     const mappingBody = document.getElementById('mapping-body');
 
@@ -350,8 +352,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiBaseUrlInput = document.getElementById('ai-base-url');
     const aiModelNameInput = document.getElementById('ai-model-name');
     const aiBaseUrlContainer = document.getElementById('ai-base-url-container');
-    const bulkGapBtn = document.getElementById('bulk-gap-btn');
-    const bulkLimitInput = document.getElementById('bulk-limit-input');
     const aiPromptTemplateInput = document.getElementById('ai-prompt-template');
     const aiGroupPromptTemplateInput = document.getElementById('ai-group-prompt-template');
     const autoLoadToggle = document.getElementById('auto-load-toggle');
@@ -463,18 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Settings Logic
 
-    if (saveSettingsBtn) {
-        saveSettingsBtn.addEventListener('click', () => {
-            if (stopwordsArea) {
-                state.stopwords = stopwordsArea.value.split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
-                saveState();
-                alert('Settings saved!');
-            }
-        });
-    }
-
     function renderSettings() {
-        if (stopwordsArea) stopwordsArea.value = state.stopwords.join('\n');
         if (aiToggle) aiToggle.checked = state.aiEnabled;
         if (modelSourceSelect) modelSourceSelect.value = state.modelSource;
         if (customHostUrl) customHostUrl.value = state.customHost;
@@ -622,20 +611,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 renderMappingTable();
             }, 50);
-        });
-    }
-
-    if (bulkGapBtn) {
-        bulkGapBtn.addEventListener('click', () => {
-            if (!state.gapAnalysisEnabled || !state.geminiApiKey) {
-                alert('Please enable AI Gap Analysis and provide an API Key in Settings first.');
-                return;
-            }
-            if (!state.custom.data || !state.drata.data) {
-                alert('No data loaded. Use Upload tab first.');
-                return;
-            }
-            runBulkGapAnalysis();
         });
     }
 
@@ -827,6 +802,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const drataTexts = state.drata.data.map(d => getColumnValue(d, state.drata.selectedColumn) || '');
             await precalculateEmbeddings(drataTexts, 'drata');
+
+            if (modelStatus) {
+                setTimeout(() => {
+                    modelStatus.style.opacity = '0';
+                    setTimeout(() => {
+                        modelStatus.style.display = 'none';
+                        modelStatus.style.opacity = '1';
+                    }, 500);
+                }, 800);
+            }
         }
 
         mappingBody.innerHTML = '';
@@ -1019,189 +1004,87 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();
     }
 
-    async function runBulkGapAnalysis() {
-        if (!state.custom.data || !state.drata.data) return;
-
-        const limit = parseInt(bulkLimitInput?.value) || 10;
-        bulkGapBtn.disabled = true;
-        bulkGapBtn.innerHTML = '⏳ Initializing...';
-
-        const tasks = [];
-        const maxControlsToProcess = Math.min(limit, state.custom.data.length);
-
-        for (let cIdx = 0; cIdx < maxControlsToProcess; cIdx++) {
-            const customControl = state.custom.data[cIdx];
-            const customText = getColumnValue(customControl, state.custom.selectedColumn) || '';
-            const customIdRaw = getColumnValue(customControl, state.custom.idColumn);
-            const mapKey = (customIdRaw !== undefined && customIdRaw !== null && customIdRaw !== '') ? String(customIdRaw) : customText;
-
-            // Find top suggestion
-            const matches = state.drata.data.map(drataControl => {
-                const drataText = getColumnValue(drataControl, state.drata.selectedColumn) || '';
-                const scores = calculateScoresSync(customText, drataText);
-                return { control: drataControl, ...scores };
-            })
-                .sort((a, b) => b[state.sortBy] - a[state.sortBy]);
-
-            if (matches.length > 0) {
-                const topMatch = matches[0];
-                const drataValue = getColumnValue(topMatch.control, state.drata.selectedColumn) || '';
-                let rawId = getColumnValue(topMatch.control, state.drata.idColumn) || findBestId(topMatch.control);
-                const drataMappedId = rawId ? String(rawId) : drataValue;
-                const commentKey = `${mapKey}-${drataMappedId}`;
-
-                if (!state.comments[commentKey] || state.comments[commentKey].startsWith('⚠️') || state.comments[commentKey] === "🤖 AI Analyzing gaps...") {
-                    tasks.push({
-                        customId: mapKey,
-                        drataId: drataMappedId,
-                        drataText: drataValue,
-                        customText: customText
-                    });
-                }
-            }
-        }
-
-        if (tasks.length === 0) {
-            alert(`No new rows to analyze in the top ${maxControlsToProcess} controls.`);
-            bulkGapBtn.disabled = false;
-            bulkGapBtn.innerHTML = '🤖 Bulk Analyze Gaps';
+    async function runGroupGapAnalysis(customId, drataIds, customText) {
+        if (!drataIds || drataIds.length === 0) {
+            alert('No Control Library controls selected for this group.');
             return;
         }
 
-        if (mappingProgress) {
-            mappingProgress.style.display = 'flex';
-            mappingProgress.style.opacity = '1';
-            mappingProgress.innerHTML = `<span class="spinner"></span> Bulk Analysis: 0 / ${tasks.length}`;
-        }
+        try {
+            state.groupComments[customId] = "🤖 AI Analyzing grouped controls...";
+            renderMappingTable();
 
-        const CONCURRENCY = 3;
-        let completed = 0;
-        const total = tasks.length;
+            // Collect all mapped drata control texts
+            const drataTexts = drataIds.map(dId => {
+                const control = state.drata.data.find(d => {
+                    let rawId = getColumnValue(d, state.drata.idColumn) || findBestId(d);
+                    const currentDrataId = rawId ? String(rawId) : (getColumnValue(d, state.drata.selectedColumn) || '');
+                    return currentDrataId === dId;
+                });
+                return control ? getColumnValue(control, state.drata.selectedColumn) : '';
+            }).filter(t => t);
 
-        async function worker() {
-            while (tasks.length > 0) {
-                const task = tasks.shift();
-                const commentKey = `${task.customId}-${task.drataId}`;
-                state.comments[commentKey] = "🤖 AI Analyzing gaps...";
+            const combinedDrataText = drataTexts.map((t, i) => `Control ${i + 1}: ${t}`).join('\n\n');
 
-                // We don't call renderMappingTable for every single one to avoid UI lag
-                // but we update the progress
-                try {
-                    await runGapAnalysis(task.customId, task.drataId, task.drataText, task.customText, false);
-                } catch (e) {
-                    console.error("Bulk Analysis Row Error:", e);
+            const template = state.aiGroupPromptTemplate || DEFAULT_AI_GROUP_PROMPT_TEMPLATE;
+
+            const prompt = template
+                .replace('{{customText}}', customText)
+                .replace('{{controlLibraryList}}', combinedDrataText);
+
+            let result = '';
+            if (state.aiProvider === 'gemini') {
+                const model = state.aiModel || 'gemini-1.5-flash';
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.geminiApiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.candidates && data.candidates[0].content.parts[0].text) {
+                    result = data.candidates[0].content.parts[0].text.trim();
                 }
+            } else if (state.aiProvider === 'openai') {
+                const baseUrl = state.aiBaseUrl || 'https://api.openai.com/v1';
+                const model = state.aiModel || 'gpt-4o';
+                const response = await fetch(`${baseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${state.geminiApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: 'system', content: 'You are a security compliance expert specialized in control mapping.' },
+                            { role: 'user', content: prompt }
+                        ],
+                        temperature: 0.2
+                    })
+                });
 
-                completed++;
-                if (mappingProgress) {
-                    mappingProgress.innerHTML = `<span class="spinner"></span> Bulk Analysis: ${completed} / ${total}`;
+                const data = await response.json();
+                if (data.choices && data.choices[0].message.content) {
+                    result = data.choices[0].message.content.trim();
                 }
-
-                // Throttle a bit to avoid hitting rate limits too fast
-                await new Promise(r => setTimeout(r, 500));
             }
+
+            if (result) {
+                state.groupComments[customId] = result;
+                saveState();
+                renderMappingTable();
+            }
+        } catch (error) {
+            console.error("Group Gap Analysis Error:", error);
+            state.groupComments[customId] = "⚠️ Analysis failed. Check API key or connection.";
+            renderMappingTable();
         }
-
-        // Start workers
-        const workers = Array(Math.min(CONCURRENCY, tasks.length)).fill(null).map(worker);
-        await Promise.all(workers);
-
-        bulkGapBtn.disabled = false;
-        bulkGapBtn.innerHTML = '🤖 Bulk Analyze Gaps';
-
-        if (mappingProgress) {
-            mappingProgress.innerHTML = '✨ Bulk Analysis Complete';
-            setTimeout(() => {
-                mappingProgress.style.opacity = '0';
-                setTimeout(() => mappingProgress.style.display = 'none', 500);
-            }, 2000);
-        }
-
-
-        renderMappingTable();
     }
 
-        async function runGroupGapAnalysis(customId, drataIds, customText) {
-            if (!drataIds || drataIds.length === 0) {
-                alert('No Control Library controls selected for this group.');
-                return;
-            }
-
-            try {
-                state.groupComments[customId] = "🤖 AI Analyzing grouped controls...";
-                renderMappingTable();
-
-                // Collect all mapped drata control texts
-                const drataTexts = drataIds.map(dId => {
-                    const control = state.drata.data.find(d => {
-                        let rawId = getColumnValue(d, state.drata.idColumn) || findBestId(d);
-                        const currentDrataId = rawId ? String(rawId) : (getColumnValue(d, state.drata.selectedColumn) || '');
-                        return currentDrataId === dId;
-                    });
-                    return control ? getColumnValue(control, state.drata.selectedColumn) : '';
-                }).filter(t => t);
-
-                const combinedDrataText = drataTexts.map((t, i) => `Control ${i + 1}: ${t}`).join('\n\n');
-
-                const template = state.aiGroupPromptTemplate || DEFAULT_AI_GROUP_PROMPT_TEMPLATE;
-
-                const prompt = template
-                    .replace('{{customText}}', customText)
-                    .replace('{{controlLibraryList}}', combinedDrataText);
-
-                let result = '';
-                if (state.aiProvider === 'gemini') {
-                    const model = state.aiModel || 'gemini-1.5-flash';
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.geminiApiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: prompt }] }]
-                        })
-                    });
-
-                    const data = await response.json();
-                    if (data.candidates && data.candidates[0].content.parts[0].text) {
-                        result = data.candidates[0].content.parts[0].text.trim();
-                    }
-                } else if (state.aiProvider === 'openai') {
-                    const baseUrl = state.aiBaseUrl || 'https://api.openai.com/v1';
-                    const model = state.aiModel || 'gpt-4o';
-                    const response = await fetch(`${baseUrl}/chat/completions`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${state.geminiApiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [
-                                { role: 'system', content: 'You are a security compliance expert specialized in control mapping.' },
-                                { role: 'user', content: prompt }
-                            ],
-                            temperature: 0.2
-                        })
-                    });
-
-                    const data = await response.json();
-                    if (data.choices && data.choices[0].message.content) {
-                        result = data.choices[0].message.content.trim();
-                    }
-                }
-
-                if (result) {
-                    state.groupComments[customId] = result;
-                    saveState();
-                    renderMappingTable();
-                }
-            } catch (error) {
-                console.error("Group Gap Analysis Error:", error);
-                state.groupComments[customId] = "⚠️ Analysis failed. Check API key or connection.";
-                renderMappingTable();
-            }
-        }
-
-    async function runGapAnalysis(customId, drataId, drataText, customText, triggerRender = true) {
+    async function runGapAnalysis(customId, drataId, drataText, customText) {
         const commentKey = `${customId}-${drataId}`;
 
         try {
@@ -1670,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Automatic background loading
-            if (state.autoLoadModel !== false && state.aiEnabled) {
+            if (state.aiEnabled) {
                 console.log("Auto-loading AI model in background...");
                 initSemanticPipeline();
             }
