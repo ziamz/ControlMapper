@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (state.modelSource === 'github') {
                 env.allowLocalModels = false;
                 env.allowRemoteModels = true;
-                env.remoteHost = 'https://raw.githubusercontent.com/ziamz/ControlMapper/main/';
+                env.remoteHost = 'https://raw.githubusercontent.com/Ompliance/ControlMapper/main/';
                 env.remotePathTemplate = 'models/{model}/';
             } else {
                 env.allowLocalModels = false;

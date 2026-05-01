@@ -41,9 +41,9 @@ To set up ControlMapper on a new laptop:
 
 ## Model Source Behavior
 
-- Default model source is **GitHub Repo (ziamz/ControlMapper)**.
+- Default model source is **GitHub Repo (Ompliance/ControlMapper)**.
 - You can switch source in **Settings > Model Source**:
-  - `GitHub Repo (ziamz/ControlMapper)`
+  - `GitHub Repo (Ompliance/ControlMapper)`
   - `Local Folder (Self-hosted)`
   - `Custom URL...`
 - Model files are cached in browser storage after first successful load.
