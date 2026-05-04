@@ -2,6 +2,17 @@
 
 ControlMapper is a secure, browser-based tool for mapping Custom Controls to a Control Library using keyword and transformer-based semantic matching.
 
+## How to access ControlMapper
+
+There are **two ways** to use the tool:
+
+1. **Hosted (no download)**  
+   Open it in your browser at **[https://www.ompliance.com/controlmapper](https://www.ompliance.com/controlmapper)**.
+
+2. **From GitHub (download / clone)**  
+   Get the app files from this repository — either **clone** the repo or use **Code → Download ZIP** on GitHub — then open `index.html` locally (see [Quick Start](#quick-start) below).  
+   You need `index.html`, `app.js`, and `styles.css` at minimum; add `models/` if you use a local model source.
+
 ## Prerequisites
 
 - **Modern Web Browser**: Chrome, Edge, or Firefox (recommended).
