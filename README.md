@@ -7,48 +7,46 @@ ControlMapper is a secure, browser-based tool for mapping Custom Controls to a C
 There are **two ways** to use the tool:
 
 1. **Hosted (no download)**  
-   Open it in your browser at **[https://www.ompliance.com/controlmapper](https://www.ompliance.com/controlmapper)**.
+   Open it in your browser at **[https://www.ompliance.com/controlmapper](https://www.ompliance.com/controlmapper)**.  
+   You only need a modern browser and (for first-time model load) an internet connection. Everything below about copying files is **not** required.
 
 2. **From GitHub (download / clone)**  
-   Get the app files from this repository — either **clone** the repo or use **Code → Download ZIP** on GitHub — then open `index.html` locally (see [Quick Start](#quick-start) below).  
-   You need `index.html`, `app.js`, and `styles.css` at minimum; add `models/` if you use a local model source.
+   Get the app files from this repository — either **clone** the repo or use **Code → Download ZIP** — then follow [Local setup](#local-setup-github-download).
 
-## Prerequisites
+---
 
-- **Modern Web Browser**: Chrome, Edge, or Firefox (recommended).
-- **Internet Connection**: Required for first-time model download (unless using local model files).
-- **Optional local server tools**: Python, Node.js, or VS Code Live Server (only needed if your environment blocks direct `file://` execution).
+## Local setup (GitHub download)
 
-## Quick Start
+Use this section when you run ControlMapper from files on your machine (not the hosted URL).
 
-To set up ControlMapper on a new laptop:
+**What you need**
 
-1. **Copy Files**:
-   - `index.html`
-   - `app.js`
-   - `styles.css`
-   - `models/` (optional, if you want local/self-hosted model files)
+- **Browser**: Chrome, Edge, or Firefox (recommended).
+- **Internet**: For the first-time transformer model download (unless you use fully local model files).
+- **Files**: At minimum `index.html`, `app.js`, and `styles.css`. Include `models/` if you use **Local Folder** as the model source in Settings.
+- **Optional**: Python, Node.js, or VS Code Live Server — only if opening `index.html` directly (`file://`) fails in your environment.
 
-2. **Launch the app**:
-   - Open `index.html` directly in your browser (double-click or open with browser).
+**Steps**
 
-3. **If direct open is blocked in your environment**, run a local server:
+1. Copy or extract the repo so you have `index.html`, `app.js`, `styles.css`, and optionally `models/`.
+2. Open `index.html` in your browser (double-click or **Open with** your browser).
+3. If that fails (modules/CORS/security), run a small local server:
 
-   **Option A: Python**
+   **Python**
    ```bash
    python -m http.server 8000
    ```
 
-   **Option B: Node.js**
+   **Node.js**
    ```bash
    npx serve .
    ```
 
-   **Option C: VS Code Live Server**
-   - Right-click `index.html` and select **Open with Live Server**.
+   **VS Code**: Right-click `index.html` → **Open with Live Server**.
 
-4. **Access URL (if using server)**:
-   - `http://localhost:8000` (or whichever port your server reports).
+4. Open `http://localhost:8000` (or the port your tool prints).
+
+---
 
 ## Model Source Behavior
 
